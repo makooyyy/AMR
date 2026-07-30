@@ -1,21 +1,39 @@
 (function () {
   "use strict";
 
-  var STORAGE_KEY = "manhwa-tracker:data:v1";
+  var STORAGE_KEY = "manhwa-tracker:data:v2";
 
   var DEFAULT_CRITERIA = ["Рисовка", "Сюжет", "Персонажи", "Динамика", "Атмосфера"];
 
   var STATUSES = [
-    { id: "reading", label: "Читаю", color: "#6C93FF" },
-    { id: "done", label: "Завершено", color: "#34D399" },
-    { id: "dropped", label: "Дропнул", color: "#8880A0" },
-    { id: "plan", label: "В планах", color: "#F3A93C" }
+    { id: "reading", label: "Читаю", color: "#5B8DEF" },
+    { id: "done", label: "Прочитано", color: "#4CD97B" },
+    { id: "dropped", label: "Брошено", color: "#8880A0" },
+    { id: "plan", label: "В планах", color: "#E8A838" }
   ];
 
   var TYPES = [
-    { id: "manhwa", label: "Манхва", color: "#FF5C77" },
-    { id: "manga", label: "Манга", color: "#6C93FF" },
-    { id: "manhua", label: "Маньхуа", color: "#F3A93C" }
+    { id: "manhwa", label: "Манхва", color: "#E85D5D" },
+    { id: "manga", label: "Манга", color: "#5B8DEF" },
+    { id: "manhua", label: "Маньхуа", color: "#E8A838" }
+  ];
+
+  var GENRES = [
+    { id: "action", label: "Экшен", color: "#E85D5D" },
+    { id: "romance", label: "Романтика", color: "#FF6B9D" },
+    { id: "fantasy", label: "Фэнтези", color: "#9B6BEF" },
+    { id: "isekai", label: "Исекай", color: "#6BEFC0" },
+    { id: "drama", label: "Драма", color: "#EF8B6B" },
+    { id: "comedy", label: "Комедия", color: "#E8D838" },
+    { id: "thriller", label: "Триллер", color: "#6B8BEF" },
+    { id: "slice", label: "Повседневность", color: "#8BEF6B" },
+    { id: "mystery", label: "Мистика", color: "#6B6BEF" },
+    { id: "adventure", label: "Приключения", color: "#EFB36B" },
+    { id: "sports", label: "Спорт", color: "#6BEFEF" },
+    { id: "horror", label: "Ужасы", color: "#8B0000" },
+    { id: "scifi", label: "Sci-Fi", color: "#6BA8EF" },
+    { id: "historical", label: "Историческое", color: "#C49B6B" },
+    { id: "martial", label: "Боевик", color: "#EF6B6B" }
   ];
 
   var state = {
@@ -24,10 +42,15 @@
     selectedId: null,
     sortMode: "recent",
     filterStatus: "all",
+    filterGenre: "all",
     searchQuery: "",
     addingManhwa: false,
     pendingType: "manhwa",
     pendingTitleDraft: "",
+    pendingGenres: [],
+    pendingCover: "",
+    pendingChaptersRead: 0,
+    pendingChaptersTotal: 0,
     addingCriterion: false,
     confirmClear: false,
     confirmDeleteId: null,
@@ -55,9 +78,9 @@
 
   function scoreColor(v) {
     if (v === null || v === undefined) return "#8880A0";
-    if (v < 5) return "#FF5C77";
-    if (v < 7.5) return "#F3A93C";
-    return "#34D399";
+    if (v < 5) return "#E85D5D";
+    if (v < 7.5) return "#E8A838";
+    return "#4CD97B";
   }
 
   function statusById(id) {
@@ -70,6 +93,11 @@
     return TYPES[0];
   }
 
+  function genreById(id) {
+    for (var i = 0; i < GENRES.length; i++) if (GENRES[i].id === id) return GENRES[i];
+    return null;
+  }
+
   function criteriaWord(n) {
     var mod10 = n % 10, mod100 = n % 100;
     if (mod10 === 1 && mod100 !== 11) return "критерий";
@@ -77,7 +105,7 @@
     return "критериев";
   }
 
-  function newManhwa(title, type) {
+  function newManhwa(title, type, genres, cover, chaptersRead, chaptersTotal) {
     return {
       id: uid(),
       title: title,
@@ -85,6 +113,10 @@
       type: type || "manhwa",
       rated: false,
       altTitles: { en: "", ja: "", ru: "" },
+      cover: cover || "",
+      genres: genres || [],
+      chaptersRead: chaptersRead || 0,
+      chaptersTotal: chaptersTotal || 0,
       criteria: DEFAULT_CRITERIA.map(function (name) {
         return { id: uid(), name: name, score: 5 };
       })
@@ -117,29 +149,33 @@
 
   /* ---------- svg pieces ---------- */
   function stampHtml(value, size) {
-    size = size || 58;
+    size = size || 50;
     var color = scoreColor(value);
     var display = value === null || value === undefined ? "—" : value.toFixed(1);
     return (
       '<div class="mt-stamp" style="width:' + size + "px;height:" + size + "px;" +
-      "border:3px solid " + color + ";box-shadow:0 0 0 2.5px " + color + "33;" +
+      "border:2.5px solid " + color + ";box-shadow:0 0 0 2px " + color + "33;" +
       "background:" + color + '12;">' +
-      '<span style="font-size:' + (size * 0.36) + "px;color:" + color + ';">' + display + "</span>" +
+      '<span style="font-size:' + (size * 0.34) + "px;color:" + color + ';">' + display + "</span>" +
       "</div>"
     );
+  }
+
+  function bookmarkSvg() {
+    return '<svg viewBox="0 0 24 24"><path d="M5 3h14v18l-7-4-7 4V3z"/></svg>';
   }
 
   function radarSvg(criteria, opts) {
     opts = opts || {};
     var size = opts.size || 220;
-    var fill = opts.fillColor || "#FF5C77";
-    var dot = opts.dotColor || "#F3A93C";
+    var fill = opts.fillColor || "#E85D5D";
+    var dot = opts.dotColor || "#E8A838";
     var n = criteria.length;
 
     if (n < 3) {
       return (
         '<div style="height:' + size * 0.6 + "px;display:flex;align-items:center;justify-content:center;" +
-        'color:#9A93AE;font-size:13px;text-align:center;padding:0 20px;">' +
+        'color:#8A8A9A;font-size:13px;text-align:center;padding:0 20px;">' +
         "Нужно хотя бы 3 критерия для диаграммы</div>"
       );
     }
@@ -172,7 +208,7 @@
     [0.25, 0.5, 0.75, 1].forEach(function (s) {
       svg +=
         '<polygon points="' + toPolygon(ringPts(s)) + '" fill="none" stroke="#FFFFFF" ' +
-        'stroke-opacity="0.10" stroke-dasharray="3,3" />';
+        'stroke-opacity="0.08" stroke-dasharray="3,3" />';
     });
 
     criteria.forEach(function (c, i) {
@@ -180,15 +216,15 @@
       var x = center + maxR * Math.cos(angle);
       var y = center + maxR * Math.sin(angle);
       svg += '<line x1="' + center + '" y1="' + center + '" x2="' + x + '" y2="' + y +
-        '" stroke="#FFFFFF" stroke-opacity="0.10" />';
+        '" stroke="#FFFFFF" stroke-opacity="0.08" />';
     });
 
     svg += '<polygon points="' + toPolygon(valuePoints) + '" fill="' + fill +
-      '" fill-opacity="0.30" stroke="' + fill + '" stroke-width="2" />';
+      '" fill-opacity="0.25" stroke="' + fill + '" stroke-width="2" />';
 
     valuePoints.forEach(function (p) {
       svg += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="4" fill="' + dot +
-        '" stroke="#120F1A" stroke-width="1.2" />';
+        '" stroke="#0D0D12" stroke-width="1.2" />';
     });
 
     criteria.forEach(function (c, i) {
@@ -197,7 +233,7 @@
       var ly = center + (maxR + 20) * Math.sin(angle);
       var label = c.name.length > 10 ? c.name.slice(0, 9) + "…" : c.name;
       svg += '<text x="' + lx + '" y="' + ly + '" text-anchor="middle" dominant-baseline="middle" ' +
-        'font-family="Manrope, sans-serif" font-weight="700" font-size="11" fill="#C9C2DA">' +
+        'font-family="Manrope, sans-serif" font-weight="700" font-size="11" fill="#8A8A9A">' +
         escapeHtml(label) + "</text>";
     });
 
@@ -237,6 +273,24 @@
     );
   }
 
+  function genreTagHtml(genreId) {
+    var g = genreById(genreId);
+    if (!g) return "";
+    return (
+      '<span class="mt-genre-tag" style="border-color:' + g.color + "55;color:" + g.color +
+      ";background:" + g.color + '12;">' + g.label + "</span>"
+    );
+  }
+
+  function chapterBadgeHtml(m) {
+    var s = statusById(m.status);
+    var text = s.label;
+    if (m.chaptersRead > 0) {
+      text += " · " + m.chaptersRead + "гл";
+    }
+    return '<span class="mt-card-badge" style="background:' + s.color + 'cc;">' + text + "</span>";
+  }
+
   /* ---------- view: library ---------- */
   function matchesQuery(m, q) {
     if (m.title.toLowerCase().indexOf(q) !== -1) return true;
@@ -251,6 +305,11 @@
     var arr = state.manhwas.slice();
     if (state.filterStatus !== "all") {
       arr = arr.filter(function (m) { return m.status === state.filterStatus; });
+    }
+    if (state.filterGenre !== "all") {
+      arr = arr.filter(function (m) {
+        return m.genres && m.genres.indexOf(state.filterGenre) !== -1;
+      });
     }
     if (state.searchQuery.trim()) {
       var q = state.searchQuery.trim().toLowerCase();
@@ -279,13 +338,24 @@
       );
     }).join("");
 
-    var filters = [{ id: "all", label: "Все", color: "#9A93AE" }].concat(STATUSES);
+    var filters = [{ id: "all", label: "Все", color: "#8A8A9A" }].concat(STATUSES);
     var filterBtns = filters.map(function (f) {
       var active = state.filterStatus === f.id;
       return (
         '<button class="mt-filter-chip' + (active ? " active" : "") + '" data-filter="' + f.id +
         '" style="' + (active ?
-          "background:" + f.color + ";color:#120F1A;border-color:" + f.color :
+          "background:" + f.color + ";color:#fff;border-color:" + f.color :
+          "border-color:" + f.color + "45;color:" + f.color) + '">' + f.label + "</button>"
+      );
+    }).join("");
+
+    var genreFilters = [{ id: "all", label: "Все жанры", color: "#8A8A9A" }].concat(GENRES);
+    var genreFilterBtns = genreFilters.map(function (f) {
+      var active = state.filterGenre === f.id;
+      return (
+        '<button class="mt-filter-chip' + (active ? " active" : "") + '" data-filter-genre="' + f.id +
+        '" style="' + (active ?
+          "background:" + f.color + ";color:#fff;border-color:" + f.color :
           "border-color:" + f.color + "45;color:" + f.color) + '">' + f.label + "</button>"
       );
     }).join("");
@@ -307,6 +377,7 @@
       escapeHtml(query) + '" />' + clearBtn +
       "</div>" +
       '<div class="mt-filter-row">' + filterBtns + "</div>" +
+      '<div class="mt-filter-row">' + genreFilterBtns + "</div>" +
       "</div>"
     );
   }
@@ -317,7 +388,7 @@
   }
 
   function renderLibrary() {
-    var html = renderHeader() + renderErrorBanner() + '<div class="mt-list">';
+    var html = renderHeader() + renderErrorBanner() + '<div class="mt-grid">';
     var list = sortedManhwas();
 
     if (list.length === 0 && !state.addingManhwa) {
@@ -326,27 +397,37 @@
         ? '<div class="mt-paper mt-empty"><div class="mt-empty-title">Пока пусто</div>' +
           '<div class="mt-empty-text">Добавь манхву — оценишь рисовку, сюжет, персонажей и всё остальное по отдельности.</div></div>'
         : '<div class="mt-paper mt-empty"><div class="mt-empty-title">Ничего не найдено</div>' +
-          '<div class="mt-empty-text">Попробуй изменить поиск или фильтр по статусу.</div></div>';
+          '<div class="mt-empty-text">Попробуй изменить поиск или фильтр.</div></div>';
     }
 
     list.forEach(function (m) {
       var avg = average(m.criteria);
-      var accent = scoreColor(avg);
+      var t = typeById(m.type || "manhwa");
+      var firstLetter = m.title.charAt(0).toUpperCase();
+
+      var coverHtml;
+      if (m.cover) {
+        coverHtml = '<img src="' + escapeHtml(m.cover) + '" alt="" loading="lazy" onerror="this.style.display='none';this.parentElement.querySelector('.mt-card-cover-placeholder').style.display='flex';" />' +
+          '<div class="mt-card-cover-placeholder" style="display:none">' + firstLetter + "</div>";
+      } else {
+        coverHtml = '<div class="mt-card-cover-placeholder">' + firstLetter + "</div>";
+      }
+
       html +=
-        '<div class="mt-paper mt-card-row" style="--accent:' + accent + '" data-card-id="' + m.id + '">' +
-        '<div class="mt-card-row-inner">' +
-        '<div class="mt-card-main" data-open-id="' + m.id + '">' +
-        '<div class="mt-card-title">' + escapeHtml(m.title) + "</div>" +
-        '<div class="mt-card-meta">' +
-        statusTagHtml(m.status) +
-        typeTagHtml(m.type || "manhwa") +
-        '<span class="mt-meta-count">' + m.criteria.length + " " + criteriaWord(m.criteria.length) + "</span>" +
-        "</div></div>" +
-        '<div data-open-id="' + m.id + '">' + stampHtml(avg, 58) + "</div>" +
-        '<button class="mt-icon-btn' + (state.confirmDeleteId === m.id ? " mt-delete-confirm" : "") +
-        '" data-delete-id="' + m.id + '" aria-label="Удалить">' +
-        (state.confirmDeleteId === m.id ? "Точно?" : "✕") + "</button>" +
-        "</div></div>";
+        '<div class="mt-card" data-card-id="' + m.id + '">' +
+        '<div class="mt-card-cover" data-open-id="' + m.id + '">' +
+        coverHtml +
+        chapterBadgeHtml(m) +
+        '<span class="mt-card-type-badge" style="background:' + t.color + 'cc;">' + t.label + '</span>' +
+        '<button class="mt-card-bookmark" data-bookmark-id="' + m.id + '" aria-label="Закладка">' + bookmarkSvg() + '</button>' +
+        '<button class="mt-card-delete' + (state.confirmDeleteId === m.id ? ' confirm' : '') + '" data-delete-id="' + m.id + '" aria-label="Удалить">' +
+        (state.confirmDeleteId === m.id ? 'Точно?' : '✕') + '</button>' +
+        '</div>' +
+        '<div class="mt-card-info" data-open-id="' + m.id + '">' +
+        '<div class="mt-card-title">' + escapeHtml(m.title) + '</div>' +
+        '<div class="mt-card-score" style="color:' + scoreColor(avg) + '">' + (avg === null ? '—' : avg.toFixed(1)) + '</div>' +
+        '</div>' +
+        '</div>';
     });
 
     if (state.addingManhwa) {
@@ -354,15 +435,38 @@
         var active = state.pendingType === t.id;
         return (
           '<button class="mt-type-choice' + (active ? " active" : "") + '" data-pick-type="' + t.id +
-          '" style="' + (active ? "background:" + t.color + ";color:#120F1A;border-color:" + t.color :
+          '" style="' + (active ? "background:" + t.color + ";color:#fff;border-color:" + t.color :
             "border-color:" + t.color + "55;color:" + t.color) + '">' + t.label + "</button>"
         );
       }).join("");
+
+      var genreBtns = GENRES.map(function (g) {
+        var active = state.pendingGenres.indexOf(g.id) !== -1;
+        return (
+          '<button class="mt-genre-chip' + (active ? " active" : "") + '" data-pick-genre="' + g.id +
+          '" style="' + (active ? "background:" + g.color + ";color:#fff;border-color:" + g.color :
+            "border-color:" + g.color + "45;color:" + g.color) + '">' + g.label + "</button>"
+        );
+      }).join("");
+
       html +=
-        '<div class="mt-paper">' +
+        '<div class="mt-paper" style="grid-column:1/-1;">' +
         '<input class="mt-input" id="new-title-input" placeholder="Название манхвы" value="' +
         escapeHtml(state.pendingTitleDraft) + '" />' +
         '<div class="mt-type-row">' + typeBtns + "</div>" +
+        '<div style="margin-top:10px;font-size:11px;color:var(--text-muted);font-weight:600;">ЖАНРЫ</div>' +
+        '<div class="mt-genre-row">' + genreBtns + "</div>" +
+        '<div style="margin-top:10px;font-size:11px;color:var(--text-muted);font-weight:600;">ОБЛОЖКА (URL)</div>' +
+        '<input class="mt-input" id="new-cover-input" placeholder="https://... или оставь пустым" value="' +
+        escapeHtml(state.pendingCover) + '" />' +
+        '<div style="margin-top:10px;font-size:11px;color:var(--text-muted);font-weight:600;">ПРОГРЕСС ГЛАВ</div>' +
+        '<div class="mt-chapter-row">' +
+        '<span class="mt-chapter-label">Прочитано</span>' +
+        '<input type="number" class="mt-input mt-chapter-input" id="new-chapters-read" value="' + (state.pendingChaptersRead || 0) + '" min="0" />' +
+        '<span class="mt-chapter-sep">/</span>' +
+        '<input type="number" class="mt-input mt-chapter-input" id="new-chapters-total" value="' + (state.pendingChaptersTotal || 0) + '" min="0" />' +
+        '<span class="mt-chapter-label">Всего</span>' +
+        '</div>' +
         '<div class="mt-form-row">' +
         '<button class="mt-primary-btn" id="confirm-add-manhwa">Добавить</button>' +
         '<button class="mt-ghost-btn" id="cancel-add-manhwa">Отмена</button>' +
@@ -374,7 +478,6 @@
     html += "</div>";
     return html;
   }
-
   /* ---------- view: detail ---------- */
   function renderAltTitlesPanel(m) {
     var alt = m.altTitles || { en: "", ja: "", ru: "" };
@@ -398,6 +501,76 @@
     );
   }
 
+  function renderGenresPanel(m, editable) {
+    var html = '<div class="mt-paper">' +
+      '<div class="mt-panel-title">ЖАНРЫ</div>';
+
+    if (editable) {
+      var genreBtns = GENRES.map(function (g) {
+        var active = m.genres && m.genres.indexOf(g.id) !== -1;
+        return (
+          '<button class="mt-genre-chip' + (active ? " active" : "") + '" data-toggle-genre="' + g.id +
+          '" style="' + (active ? "background:" + g.color + ";color:#fff;border-color:" + g.color :
+            "border-color:" + g.color + "45;color:" + g.color) + '">' + g.label + "</button>"
+        );
+      }).join("");
+      html += '<div class="mt-genre-row">' + genreBtns + '</div>';
+    } else {
+      if (m.genres && m.genres.length > 0) {
+        html += '<div class="mt-genre-display">' + m.genres.map(genreTagHtml).join("") + '</div>';
+      } else {
+        html += '<div style="color:var(--text-faint);font-size:12px;">Жанры не указаны</div>';
+      }
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderChaptersPanel(m, editable) {
+    var html = '<div class="mt-paper">' +
+      '<div class="mt-panel-title">ПРОГРЕСС</div>';
+
+    if (editable) {
+      html += '<div class="mt-chapter-row">' +
+        '<span class="mt-chapter-label">Прочитано</span>' +
+        '<input type="number" class="mt-input mt-chapter-input" id="chapters-read-input" value="' + (m.chaptersRead || 0) + '" min="0" />' +
+        '<span class="mt-chapter-sep">/</span>' +
+        '<input type="number" class="mt-input mt-chapter-input" id="chapters-total-input" value="' + (m.chaptersTotal || 0) + '" min="0" />' +
+        '<span class="mt-chapter-label">Всего</span>' +
+        '</div>';
+    } else {
+      html += '<div style="display:flex;align-items:center;gap:8px;">' +
+        '<span style="font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:var(--text-primary);">' + (m.chaptersRead || 0) + '</span>' +
+        '<span style="color:var(--text-faint);">/</span>' +
+        '<span style="font-family:'Space Mono',monospace;font-size:14px;color:var(--text-muted);">' + (m.chaptersTotal || 0) + '</span>' +
+        '<span style="font-size:11px;color:var(--text-muted);margin-left:4px;">глав</span>' +
+        '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderCoverPanel(m, editable) {
+    var firstLetter = m.title.charAt(0).toUpperCase();
+    var coverHtml;
+    if (m.cover) {
+      coverHtml = '<img src="' + escapeHtml(m.cover) + '" alt="" onerror="this.style.display='none';this.parentElement.querySelector('.mt-detail-cover-placeholder').style.display='flex';" />' +
+        '<div class="mt-detail-cover-placeholder" style="display:none">' + firstLetter + "</div>";
+    } else {
+      coverHtml = '<div class="mt-detail-cover-placeholder">' + firstLetter + "</div>";
+    }
+
+    var html = '<div class="mt-detail-cover-wrap">' + coverHtml + '</div>';
+
+    if (editable) {
+      html += '<div class="mt-cover-input-row" style="margin-top:10px;">' +
+        '<input class="mt-input" id="cover-url-input" placeholder="URL обложки" value="' + escapeHtml(m.cover || "") + '" />' +
+        '<button class="mt-ghost-btn" id="save-cover-btn" style="flex-shrink:0;">OK</button>' +
+        '</div>';
+    }
+    return html;
+  }
+
   function renderDetail(m) {
     var avg = average(m.criteria);
     var isNew = m.rated === false;
@@ -415,7 +588,10 @@
       "</div>" +
       renderErrorBanner() +
       '<div class="mt-detail-body">' +
+      renderCoverPanel(m, editable) +
+      renderChaptersPanel(m, editable) +
       renderAltTitlesPanel(m) +
+      renderGenresPanel(m, editable) +
       '<div class="mt-paper mt-radar-panel">' + radarSvg(m.criteria, {}) + stampHtml(avg, 50) + "</div>" +
       '<div class="mt-paper mt-criteria-panel">';
 
@@ -493,6 +669,32 @@
       .slice(0, 8);
   }
 
+  function aggregateGenres() {
+    var map = {};
+    state.manhwas.forEach(function (m) {
+      var avg = average(m.criteria);
+      if (avg === null) return;
+      if (!m.genres) return;
+      m.genres.forEach(function (gId) {
+        if (!map[gId]) map[gId] = { sum: 0, count: 0, totalScore: 0 };
+        map[gId].sum += avg;
+        map[gId].count += 1;
+      });
+    });
+    return Object.keys(map)
+      .map(function (gId) {
+        var g = genreById(gId);
+        return {
+          id: gId,
+          name: g ? g.label : gId,
+          color: g ? g.color : "#8880A0",
+          avgScore: map[gId].sum / map[gId].count,
+          count: map[gId].count
+        };
+      })
+      .sort(function (a, b) { return b.avgScore - a.avgScore; });
+  }
+
   function miniRowHtml(m) {
     var avg = average(m.criteria);
     return (
@@ -511,12 +713,12 @@
 
     var html =
       '<div class="mt-profile-head">' +
-      '<div class="mt-profile-title">ПРОФИЛЬ<span style="color:#FF5C77">.</span></div>' +
+      '<div class="mt-profile-title">ПРОФИЛЬ<span style="color:#E85D5D">.</span></div>' +
       '<div class="mt-profile-sub">Статистика по всей библиотеке</div>' +
       "</div>" + renderErrorBanner() +
-      '<div class="mt-list">' +
+      '<div class="mt-list" style="padding:6px 16px 110px;display:flex;flex-direction:column;gap:14px;">' +
       '<div class="mt-chip-row">' +
-      '<div class="mt-chip"><div class="mt-chip-value">' + state.manhwas.length + '</div><div class="mt-chip-label">манхв в списке</div></div>' +
+      '<div class="mt-chip"><div class="mt-chip-value">' + state.manhwas.length + '</div><div class="mt-chip-label">в списке</div></div>' +
       '<div class="mt-chip"><div class="mt-chip-value" style="color:' + scoreColor(overallAvg) + '">' +
       (overallAvg === null ? "—" : overallAvg.toFixed(1)) + '</div><div class="mt-chip-label">средняя оценка</div></div>' +
       "</div>";
@@ -538,13 +740,34 @@
       '<div class="mt-status-track">' + track + "</div>" +
       '<div class="mt-status-legend">' + legend + "</div></div>";
 
+    // genre stats
+    var genreStats = aggregateGenres();
+    if (genreStats.length > 0) {
+      var maxScore = Math.max.apply(null, genreStats.map(function (g) { return g.avgScore; }));
+      var genreBars = genreStats.slice(0, 10).map(function (g) {
+        var pct = (g.avgScore / maxScore) * 100;
+        return (
+          '<div class="mt-genre-stat-row">' +
+          '<span class="mt-genre-stat-name">' + escapeHtml(g.name) + "</span>" +
+          '<div class="mt-genre-stat-bar-track"><div class="mt-genre-stat-bar-fill" style="width:' + pct +
+          "%;background:" + g.color + ';"></div></div>' +
+          '<span class="mt-genre-stat-value" style="color:' + g.color + '">' + g.avgScore.toFixed(1) + "</span>" +
+          '<span class="mt-genre-stat-count">' + g.count + " шт</span>" +
+          "</div>"
+        );
+      }).join("");
+      html +=
+        '<div class="mt-paper"><div class="mt-panel-title">ЛЮБИМЫЕ ЖАНРЫ</div>' +
+        genreBars + "</div>";
+    }
+
     var agg = aggregateCriteria();
     if (agg.length >= 3) {
       html +=
         '<div class="mt-paper mt-radar-panel" style="align-items:flex-start">' +
         '<div class="mt-panel-title">СРЕДНЕЕ ПО КРИТЕРИЯМ</div>' +
         '<div style="width:100%;display:flex;justify-content:center">' +
-        radarSvg(agg, { fillColor: "#6C93FF", dotColor: "#F3A93C" }) + "</div></div>";
+        radarSvg(agg, { fillColor: "#5B8DEF", dotColor: "#E8A838" }) + "</div></div>";
     }
 
     if (agg.length > 0) {
@@ -565,12 +788,12 @@
 
     if (top.length > 0) {
       html +=
-        '<div class="mt-paper"><div class="mt-panel-title" style="color:#34D399">ТОП ПО ОЦЕНКЕ</div>' +
+        '<div class="mt-paper"><div class="mt-panel-title" style="color:#4CD97B">ТОП ПО ОЦЕНКЕ</div>' +
         top.map(miniRowHtml).join("") + "</div>";
     }
     if (bottom.length > 0) {
       html +=
-        '<div class="mt-paper"><div class="mt-panel-title" style="color:#FF5C77">АУТСАЙДЕРЫ</div>' +
+        '<div class="mt-paper"><div class="mt-panel-title" style="color:#E85D5D">АУТСАЙДЕРЫ</div>' +
         bottom.map(miniRowHtml).join("") + "</div>";
     }
 
@@ -609,7 +832,6 @@
     }).join("");
     return '<div class="mt-tabbar"><div class="mt-tabbar-inner">' + inner + "</div></div>";
   }
-
   /* ---------- main render ---------- */
   function render() {
     var app = document.getElementById("app");
@@ -674,6 +896,13 @@
       });
     });
 
+    app.querySelectorAll("[data-filter-genre]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        state.filterGenre = btn.getAttribute("data-filter-genre");
+        render();
+      });
+    });
+
     var searchInput = document.getElementById("search-input");
     if (searchInput) {
       searchInput.addEventListener("input", function () {
@@ -726,7 +955,7 @@
       });
     });
 
-    // delete manhwa (requires confirm tap)
+    // delete manhwa
     app.querySelectorAll("[data-delete-id]").forEach(function (btn) {
       btn.addEventListener("click", function (e) {
         e.stopPropagation();
@@ -750,12 +979,25 @@
       });
     });
 
+    // bookmark toggle
+    app.querySelectorAll("[data-bookmark-id]").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        // bookmark functionality - could be extended later
+        btn.style.opacity = btn.style.opacity === "0.4" ? "1" : "0.4";
+      });
+    });
+
     // add manhwa flow
     var startAdd = document.getElementById("start-add-manhwa");
     if (startAdd) startAdd.addEventListener("click", function () {
       state.addingManhwa = true;
       state.pendingType = "manhwa";
       state.pendingTitleDraft = "";
+      state.pendingGenres = [];
+      state.pendingCover = "";
+      state.pendingChaptersRead = 0;
+      state.pendingChaptersTotal = 0;
       render();
       var inp = document.getElementById("new-title-input");
       if (inp) inp.focus();
@@ -765,6 +1007,8 @@
     if (cancelAdd) cancelAdd.addEventListener("click", function () {
       state.addingManhwa = false;
       state.pendingTitleDraft = "";
+      state.pendingGenres = [];
+      state.pendingCover = "";
       render();
     });
 
@@ -772,7 +1016,36 @@
       btn.addEventListener("click", function () {
         var draftInput = document.getElementById("new-title-input");
         state.pendingTitleDraft = draftInput ? draftInput.value : "";
+        var coverInput = document.getElementById("new-cover-input");
+        state.pendingCover = coverInput ? coverInput.value : "";
+        var readInput = document.getElementById("new-chapters-read");
+        state.pendingChaptersRead = readInput ? parseInt(readInput.value) || 0 : 0;
+        var totalInput = document.getElementById("new-chapters-total");
+        state.pendingChaptersTotal = totalInput ? parseInt(totalInput.value) || 0 : 0;
         state.pendingType = btn.getAttribute("data-pick-type");
+        render();
+        var inp = document.getElementById("new-title-input");
+        if (inp) inp.focus();
+      });
+    });
+
+    app.querySelectorAll("[data-pick-genre]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var gId = btn.getAttribute("data-pick-genre");
+        var idx = state.pendingGenres.indexOf(gId);
+        if (idx !== -1) {
+          state.pendingGenres.splice(idx, 1);
+        } else {
+          state.pendingGenres.push(gId);
+        }
+        var draftInput = document.getElementById("new-title-input");
+        state.pendingTitleDraft = draftInput ? draftInput.value : "";
+        var coverInput = document.getElementById("new-cover-input");
+        state.pendingCover = coverInput ? coverInput.value : "";
+        var readInput = document.getElementById("new-chapters-read");
+        state.pendingChaptersRead = readInput ? parseInt(readInput.value) || 0 : 0;
+        var totalInput = document.getElementById("new-chapters-total");
+        state.pendingChaptersTotal = totalInput ? parseInt(totalInput.value) || 0 : 0;
         render();
         var inp = document.getElementById("new-title-input");
         if (inp) inp.focus();
@@ -784,10 +1057,19 @@
     function submitNewManhwa() {
       var val = titleInput ? titleInput.value.trim() : "";
       if (!val) return;
-      state.manhwas.push(newManhwa(val, state.pendingType));
+      var coverInput = document.getElementById("new-cover-input");
+      var cover = coverInput ? coverInput.value.trim() : "";
+      var readInput = document.getElementById("new-chapters-read");
+      var totalInput = document.getElementById("new-chapters-total");
+      var chaptersRead = readInput ? parseInt(readInput.value) || 0 : 0;
+      var chaptersTotal = totalInput ? parseInt(totalInput.value) || 0 : 0;
+      state.manhwas.push(newManhwa(val, state.pendingType, state.pendingGenres.slice(), cover, chaptersRead, chaptersTotal));
       state.addingManhwa = false;
       state.pendingTitleDraft = "";
-      state.pendingType = "manhwa";
+      state.pendingGenres = [];
+      state.pendingCover = "";
+      state.pendingChaptersRead = 0;
+      state.pendingChaptersTotal = 0;
       save();
       render();
     }
@@ -805,7 +1087,7 @@
       render();
     });
 
-    // criterion sliders — live label update on input, full save+render on change
+    // criterion sliders
     app.querySelectorAll("[data-slider-crit]").forEach(function (slider) {
       var critId = slider.getAttribute("data-slider-crit");
       slider.addEventListener("input", function () {
@@ -865,6 +1147,52 @@
         render();
       });
     });
+
+    // toggle genres in detail
+    app.querySelectorAll("[data-toggle-genre]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        if (!selected) return;
+        var gId = btn.getAttribute("data-toggle-genre");
+        if (!selected.genres) selected.genres = [];
+        var idx = selected.genres.indexOf(gId);
+        if (idx !== -1) {
+          selected.genres.splice(idx, 1);
+        } else {
+          selected.genres.push(gId);
+        }
+        save();
+        render();
+      });
+    });
+
+    // chapters in detail
+    var chaptersReadInput = document.getElementById("chapters-read-input");
+    var chaptersTotalInput = document.getElementById("chapters-total-input");
+    if (chaptersReadInput && selected) {
+      chaptersReadInput.addEventListener("change", function () {
+        selected.chaptersRead = parseInt(chaptersReadInput.value) || 0;
+        save();
+        render();
+      });
+    }
+    if (chaptersTotalInput && selected) {
+      chaptersTotalInput.addEventListener("change", function () {
+        selected.chaptersTotal = parseInt(chaptersTotalInput.value) || 0;
+        save();
+        render();
+      });
+    }
+
+    // cover url in detail
+    var coverUrlInput = document.getElementById("cover-url-input");
+    var saveCoverBtn = document.getElementById("save-cover-btn");
+    if (saveCoverBtn && coverUrlInput && selected) {
+      saveCoverBtn.addEventListener("click", function () {
+        selected.cover = coverUrlInput.value.trim();
+        save();
+        render();
+      });
+    }
 
     // add criterion flow
     var startAddCrit = document.getElementById("start-add-crit");
