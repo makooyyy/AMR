@@ -137,6 +137,11 @@ body {
 }
 .mt-icon-btn:hover { color: var(--text-muted); }
 .mt-icon-btn.on-dark { color: var(--text-muted); font-size: 20px; }
+.mt-delete-confirm {
+  color: var(--red) !important; font-size: 11px !important; font-weight: 800;
+  border: 1px solid var(--red) !important; border-radius: 12px; padding: 3px 8px !important;
+  background: rgba(255,92,119,0.1);
+}
 
 .mt-empty { text-align: center; padding: 36px 20px; }
 .mt-empty-title { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--text-primary); margin-bottom: 6px; }
@@ -195,6 +200,8 @@ body {
 
 .mt-radar-panel { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 
+.mt-lock-hint { color: var(--text-muted); font-size: 12px; margin-bottom: 4px; }
+
 .mt-criteria-panel { display: flex; flex-direction: column; gap: 20px; }
 .mt-crit-row { display: flex; flex-direction: column; gap: 7px; }
 .mt-crit-top { display: flex; justify-content: space-between; align-items: baseline; }
@@ -228,6 +235,13 @@ input[type="range"].mt-slider::-moz-range-thumb {
 }
 .mt-chip-value { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 24px; color: var(--text-primary); }
 .mt-chip-label { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+
+.mt-alt-row { display: flex; align-items: center; gap: 10px; }
+.mt-alt-row + .mt-alt-row { margin-top: 10px; }
+.mt-alt-label {
+  font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; color: var(--text-faint);
+  width: 26px; flex-shrink: 0;
+}
 
 .mt-panel-title {
   font-family: 'Bebas Neue', sans-serif; font-size: 17px; color: var(--text-primary);

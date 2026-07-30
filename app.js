@@ -30,6 +30,8 @@
     pendingTitleDraft: "",
     addingCriterion: false,
     confirmClear: false,
+    confirmDeleteId: null,
+    unlockedIds: {},
     error: null
   };
 
@@ -81,6 +83,8 @@
       title: title,
       status: "reading",
       type: type || "manhwa",
+      rated: false,
+      altTitles: { en: "", ja: "", ru: "" },
       criteria: DEFAULT_CRITERIA.map(function (name) {
         return { id: uid(), name: name, score: 5 };
       })
@@ -234,6 +238,15 @@
   }
 
   /* ---------- view: library ---------- */
+  function matchesQuery(m, q) {
+    if (m.title.toLowerCase().indexOf(q) !== -1) return true;
+    var alt = m.altTitles;
+    if (!alt) return false;
+    return Object.keys(alt).some(function (k) {
+      return (alt[k] || "").toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
   function sortedManhwas() {
     var arr = state.manhwas.slice();
     if (state.filterStatus !== "all") {
@@ -241,7 +254,7 @@
     }
     if (state.searchQuery.trim()) {
       var q = state.searchQuery.trim().toLowerCase();
-      arr = arr.filter(function (m) { return m.title.toLowerCase().indexOf(q) !== -1; });
+      arr = arr.filter(function (m) { return matchesQuery(m, q); });
     }
     if (state.sortMode === "rating") {
       arr.sort(function (a, b) {
@@ -330,7 +343,9 @@
         '<span class="mt-meta-count">' + m.criteria.length + " " + criteriaWord(m.criteria.length) + "</span>" +
         "</div></div>" +
         '<div data-open-id="' + m.id + '">' + stampHtml(avg, 58) + "</div>" +
-        '<button class="mt-icon-btn" data-delete-id="' + m.id + '" aria-label="Удалить">✕</button>' +
+        '<button class="mt-icon-btn' + (state.confirmDeleteId === m.id ? " mt-delete-confirm" : "") +
+        '" data-delete-id="' + m.id + '" aria-label="Удалить">' +
+        (state.confirmDeleteId === m.id ? "Точно?" : "✕") + "</button>" +
         "</div></div>";
     });
 
@@ -361,8 +376,34 @@
   }
 
   /* ---------- view: detail ---------- */
+  function renderAltTitlesPanel(m) {
+    var alt = m.altTitles || { en: "", ja: "", ru: "" };
+    var fields = [
+      ["en", "EN", "Английское название"],
+      ["ja", "JP", "Японское название"],
+      ["ru", "RU", "Русское название"]
+    ];
+    var rows = fields.map(function (f) {
+      return (
+        '<div class="mt-alt-row"><span class="mt-alt-label">' + f[1] + "</span>" +
+        '<input class="mt-input" data-alt-lang="' + f[0] + '" placeholder="' + f[2] + '" value="' +
+        escapeHtml(alt[f[0]] || "") + '" /></div>'
+      );
+    }).join("");
+    return (
+      '<div class="mt-paper">' +
+      '<div class="mt-panel-title">АЛЬТЕРНАТИВНЫЕ НАЗВАНИЯ</div>' +
+      rows +
+      "</div>"
+    );
+  }
+
   function renderDetail(m) {
     var avg = average(m.criteria);
+    var isNew = m.rated === false;
+    var unlocked = !!state.unlockedIds[m.id];
+    var editable = isNew || unlocked;
+
     var html =
       '<div class="mt-detail-head">' +
       '<button class="mt-icon-btn on-dark" id="back-btn" aria-label="Назад">←</button>' +
@@ -374,38 +415,58 @@
       "</div>" +
       renderErrorBanner() +
       '<div class="mt-detail-body">' +
+      renderAltTitlesPanel(m) +
       '<div class="mt-paper mt-radar-panel">' + radarSvg(m.criteria, {}) + stampHtml(avg, 50) + "</div>" +
       '<div class="mt-paper mt-criteria-panel">';
 
-    m.criteria.forEach(function (c) {
-      var color = scoreColor(c.score);
-      var removable = m.criteria.length > 1;
-      html +=
-        '<div class="mt-crit-row" data-crit-id="' + c.id + '">' +
-        '<div class="mt-crit-top">' +
-        '<span class="mt-crit-name">' + escapeHtml(c.name) + "</span>" +
-        '<div class="mt-crit-right">' +
-        '<span class="mt-crit-score" data-score-label="' + c.id + '" style="color:' + color + '">' +
-        c.score.toFixed(1) + "</span>" +
-        (removable ? '<button class="mt-icon-btn" data-delete-crit="' + c.id + '" aria-label="Удалить критерий">✕</button>' : "") +
-        "</div></div>" +
-        '<input type="range" class="mt-slider" min="1" max="10" step="0.5" value="' + c.score +
-        '" data-slider-crit="' + c.id + '" />' +
-        "</div>";
-    });
+    if (editable) {
+      html += '<div class="mt-lock-hint">' + (isNew ? "Выставь оценки — потом можно будет только смотреть" : "Режим редактирования") + "</div>";
+      m.criteria.forEach(function (c) {
+        var color = scoreColor(c.score);
+        var removable = m.criteria.length > 1;
+        html +=
+          '<div class="mt-crit-row" data-crit-id="' + c.id + '">' +
+          '<div class="mt-crit-top">' +
+          '<span class="mt-crit-name">' + escapeHtml(c.name) + "</span>" +
+          '<div class="mt-crit-right">' +
+          '<span class="mt-crit-score" data-score-label="' + c.id + '" style="color:' + color + '">' +
+          c.score.toFixed(1) + "</span>" +
+          (removable ? '<button class="mt-icon-btn" data-delete-crit="' + c.id + '" aria-label="Удалить критерий">✕</button>' : "") +
+          "</div></div>" +
+          '<input type="range" class="mt-slider" min="1" max="10" step="0.5" value="' + c.score +
+          '" data-slider-crit="' + c.id + '" />' +
+          "</div>";
+      });
+    } else {
+      m.criteria.forEach(function (c) {
+        var color = scoreColor(c.score);
+        html +=
+          '<div class="mt-bar-row"><span class="mt-bar-name">' + escapeHtml(c.name) + "</span>" +
+          '<div class="mt-bar-track"><div class="mt-bar-fill" style="width:' + (c.score / 10) * 100 +
+          "%;background:" + color + ';"></div></div>' +
+          '<span class="mt-bar-value" style="color:' + color + '">' + c.score.toFixed(1) + "</span></div>";
+      });
+    }
 
     html += "</div>";
 
-    if (state.addingCriterion) {
-      html +=
-        '<div class="mt-paper">' +
-        '<input class="mt-input" id="new-crit-input" placeholder="Свой критерий (напр. Саундтрек, Перевод)" />' +
-        '<div class="mt-form-row">' +
-        '<button class="mt-primary-btn" id="confirm-add-crit">Добавить</button>' +
-        '<button class="mt-ghost-btn" id="cancel-add-crit">Отмена</button>' +
-        "</div></div>";
+    if (editable) {
+      if (state.addingCriterion) {
+        html +=
+          '<div class="mt-paper">' +
+          '<input class="mt-input" id="new-crit-input" placeholder="Свой критерий (напр. Саундтрек, Перевод)" />' +
+          '<div class="mt-form-row">' +
+          '<button class="mt-primary-btn" id="confirm-add-crit">Добавить</button>' +
+          '<button class="mt-ghost-btn" id="cancel-add-crit">Отмена</button>' +
+          "</div></div>";
+      } else {
+        html += '<button class="mt-add-btn" id="start-add-crit">+ Свой критерий</button>';
+      }
+      html += '<button class="mt-primary-btn" id="finish-rating-btn" data-manhwa-id="' + m.id +
+        '" style="width:100%">Готово</button>';
     } else {
-      html += '<button class="mt-add-btn" id="start-add-crit">+ Свой критерий</button>';
+      html += '<button class="mt-ghost-btn" id="unlock-rating-btn" data-manhwa-id="' + m.id +
+        '" style="width:100%">✎ Изменить оценку</button>';
     }
 
     html += "</div>";
@@ -665,15 +726,27 @@
       });
     });
 
-    // delete manhwa
+    // delete manhwa (requires confirm tap)
     app.querySelectorAll("[data-delete-id]").forEach(function (btn) {
       btn.addEventListener("click", function (e) {
         e.stopPropagation();
         var id = btn.getAttribute("data-delete-id");
-        state.manhwas = state.manhwas.filter(function (m) { return m.id !== id; });
-        if (state.selectedId === id) state.selectedId = null;
-        save();
-        render();
+        if (state.confirmDeleteId === id) {
+          state.manhwas = state.manhwas.filter(function (m) { return m.id !== id; });
+          if (state.selectedId === id) state.selectedId = null;
+          state.confirmDeleteId = null;
+          save();
+          render();
+        } else {
+          state.confirmDeleteId = id;
+          render();
+          setTimeout(function () {
+            if (state.confirmDeleteId === id) {
+              state.confirmDeleteId = null;
+              render();
+            }
+          }, 3000);
+        }
       });
     });
 
@@ -726,6 +799,7 @@
     // back button
     var backBtn = document.getElementById("back-btn");
     if (backBtn) backBtn.addEventListener("click", function () {
+      if (state.selectedId) delete state.unlockedIds[state.selectedId];
       state.selectedId = null;
       state.addingCriterion = false;
       render();
@@ -752,7 +826,36 @@
       });
     });
 
-    // delete criterion
+    // alternative titles
+    var finishBtn = document.getElementById("finish-rating-btn");
+    if (finishBtn) finishBtn.addEventListener("click", function () {
+      var id = finishBtn.getAttribute("data-manhwa-id");
+      var m = findManhwa(id);
+      if (m) m.rated = true;
+      delete state.unlockedIds[id];
+      save();
+      render();
+    });
+
+    var unlockBtn = document.getElementById("unlock-rating-btn");
+    if (unlockBtn) unlockBtn.addEventListener("click", function () {
+      var id = unlockBtn.getAttribute("data-manhwa-id");
+      state.unlockedIds[id] = true;
+      render();
+    });
+
+    app.querySelectorAll("[data-alt-lang]").forEach(function (input) {
+      var lang = input.getAttribute("data-alt-lang");
+      input.addEventListener("input", function () {
+        if (!selected) return;
+        if (!selected.altTitles) selected.altTitles = { en: "", ja: "", ru: "" };
+        selected.altTitles[lang] = input.value;
+      });
+      input.addEventListener("blur", function () {
+        save();
+      });
+    });
+
     app.querySelectorAll("[data-delete-crit]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         if (!selected) return;
