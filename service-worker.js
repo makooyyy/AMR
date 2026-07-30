@@ -1,4 +1,4 @@
-var CACHE_NAME = "manhwa-tracker-v6";
+var CACHE_NAME = "manhwa-tracker-v5";
 var ASSETS = [
   "./",
   "./index.html",
@@ -54,5 +54,3 @@ self.addEventListener("fetch", function (event) {
     })
   );
 });
-
-
