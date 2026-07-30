@@ -91,6 +91,20 @@ body {
 }
 .mt-subtitle { color: var(--text-muted); font-size: 13px; }
 
+.mt-search-wrap { position: relative; margin-top: 12px; }
+.mt-search-input { padding-right: 34px; }
+.mt-search-clear {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  background: transparent; border: none; color: var(--text-faint); font-size: 14px;
+  cursor: pointer; padding: 4px;
+}
+
+.mt-filter-row { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.mt-filter-chip {
+  border-radius: 20px; padding: 5px 12px; font-size: 12px; font-weight: 700;
+  font-family: 'Manrope', sans-serif; cursor: pointer; border: 1.5px solid; background: transparent;
+}
+
 .mt-sort-group { display: flex; gap: 6px; }
 .mt-sort-btn {
   background: rgba(255,255,255,0.04); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.08);
