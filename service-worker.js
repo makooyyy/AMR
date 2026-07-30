@@ -1,4 +1,4 @@
-var CACHE_NAME = "manhwa-tracker-v1";
+var CACHE_NAME = "manhwa-tracker-v3";
 var ASSETS = [
   "./",
   "./index.html",

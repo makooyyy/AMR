@@ -6,10 +6,16 @@
   var DEFAULT_CRITERIA = ["Рисовка", "Сюжет", "Персонажи", "Динамика", "Атмосфера"];
 
   var STATUSES = [
-    { id: "reading", label: "Читаю", color: "#3B6FD9" },
-    { id: "done", label: "Завершено", color: "#2E9E6B" },
-    { id: "dropped", label: "Дропнул", color: "#8B8578" },
-    { id: "plan", label: "В планах", color: "#D98E2B" }
+    { id: "reading", label: "Читаю", color: "#6C93FF" },
+    { id: "done", label: "Завершено", color: "#34D399" },
+    { id: "dropped", label: "Дропнул", color: "#8880A0" },
+    { id: "plan", label: "В планах", color: "#F3A93C" }
+  ];
+
+  var TYPES = [
+    { id: "manhwa", label: "Манхва", color: "#FF5C77" },
+    { id: "manga", label: "Манга", color: "#6C93FF" },
+    { id: "manhua", label: "Маньхуа", color: "#F3A93C" }
   ];
 
   var state = {
@@ -18,6 +24,8 @@
     selectedId: null,
     sortMode: "recent",
     addingManhwa: false,
+    pendingType: "manhwa",
+    pendingTitleDraft: "",
     addingCriterion: false,
     confirmClear: false,
     error: null
@@ -42,15 +50,20 @@
   }
 
   function scoreColor(v) {
-    if (v === null || v === undefined) return "#8B8578";
-    if (v < 5) return "#E63950";
-    if (v < 7.5) return "#D98E2B";
-    return "#2E9E6B";
+    if (v === null || v === undefined) return "#8880A0";
+    if (v < 5) return "#FF5C77";
+    if (v < 7.5) return "#F3A93C";
+    return "#34D399";
   }
 
   function statusById(id) {
     for (var i = 0; i < STATUSES.length; i++) if (STATUSES[i].id === id) return STATUSES[i];
     return STATUSES[0];
+  }
+
+  function typeById(id) {
+    for (var i = 0; i < TYPES.length; i++) if (TYPES[i].id === id) return TYPES[i];
+    return TYPES[0];
   }
 
   function criteriaWord(n) {
@@ -60,11 +73,12 @@
     return "критериев";
   }
 
-  function newManhwa(title) {
+  function newManhwa(title, type) {
     return {
       id: uid(),
       title: title,
       status: "reading",
+      type: type || "manhwa",
       criteria: DEFAULT_CRITERIA.map(function (name) {
         return { id: uid(), name: name, score: 5 };
       })
@@ -112,14 +126,14 @@
   function radarSvg(criteria, opts) {
     opts = opts || {};
     var size = opts.size || 220;
-    var fill = opts.fillColor || "#E63950";
-    var dot = opts.dotColor || "#D98E2B";
+    var fill = opts.fillColor || "#FF5C77";
+    var dot = opts.dotColor || "#F3A93C";
     var n = criteria.length;
 
     if (n < 3) {
       return (
         '<div style="height:' + size * 0.6 + "px;display:flex;align-items:center;justify-content:center;" +
-        'color:#8B8578;font-size:13px;text-align:center;padding:0 20px;">' +
+        'color:#9A93AE;font-size:13px;text-align:center;padding:0 20px;">' +
         "Нужно хотя бы 3 критерия для диаграммы</div>"
       );
     }
@@ -151,8 +165,8 @@
 
     [0.25, 0.5, 0.75, 1].forEach(function (s) {
       svg +=
-        '<polygon points="' + toPolygon(ringPts(s)) + '" fill="none" stroke="#1A1822" ' +
-        'stroke-opacity="0.18" stroke-dasharray="3,3" />';
+        '<polygon points="' + toPolygon(ringPts(s)) + '" fill="none" stroke="#FFFFFF" ' +
+        'stroke-opacity="0.10" stroke-dasharray="3,3" />';
     });
 
     criteria.forEach(function (c, i) {
@@ -160,15 +174,15 @@
       var x = center + maxR * Math.cos(angle);
       var y = center + maxR * Math.sin(angle);
       svg += '<line x1="' + center + '" y1="' + center + '" x2="' + x + '" y2="' + y +
-        '" stroke="#1A1822" stroke-opacity="0.18" />';
+        '" stroke="#FFFFFF" stroke-opacity="0.10" />';
     });
 
     svg += '<polygon points="' + toPolygon(valuePoints) + '" fill="' + fill +
-      '" fill-opacity="0.28" stroke="' + fill + '" stroke-width="2" />';
+      '" fill-opacity="0.30" stroke="' + fill + '" stroke-width="2" />';
 
     valuePoints.forEach(function (p) {
       svg += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="4" fill="' + dot +
-        '" stroke="#1A1822" stroke-width="1.2" />';
+        '" stroke="#120F1A" stroke-width="1.2" />';
     });
 
     criteria.forEach(function (c, i) {
@@ -177,7 +191,7 @@
       var ly = center + (maxR + 20) * Math.sin(angle);
       var label = c.name.length > 10 ? c.name.slice(0, 9) + "…" : c.name;
       svg += '<text x="' + lx + '" y="' + ly + '" text-anchor="middle" dominant-baseline="middle" ' +
-        'font-family="Manrope, sans-serif" font-weight="700" font-size="11" fill="#1A1822">' +
+        'font-family="Manrope, sans-serif" font-weight="700" font-size="11" fill="#C9C2DA">' +
         escapeHtml(label) + "</text>";
     });
 
@@ -190,6 +204,30 @@
     return (
       '<button class="mt-status-badge" style="border-color:' + s.color + ";color:" + s.color +
       ";background:" + s.color + '18;" ' + (extraAttrs || "") + ">" + s.label + "</button>"
+    );
+  }
+
+  function statusTagHtml(statusId) {
+    var s = statusById(statusId);
+    return (
+      '<span class="mt-status-badge mt-status-tag" style="border-color:' + s.color + ";color:" + s.color +
+      ";background:" + s.color + '18;">' + s.label + "</span>"
+    );
+  }
+
+  function typeBadgeHtml(typeId, extraAttrs) {
+    var t = typeById(typeId);
+    return (
+      '<button class="mt-status-badge" style="border-color:' + t.color + ";color:" + t.color +
+      ";background:" + t.color + '18;" ' + (extraAttrs || "") + ">" + t.label + "</button>"
+    );
+  }
+
+  function typeTagHtml(typeId) {
+    var t = typeById(typeId);
+    return (
+      '<span class="mt-status-badge mt-status-tag" style="border-color:' + t.color + ";color:" + t.color +
+      ";background:" + t.color + '18;">' + t.label + "</span>"
     );
   }
 
@@ -244,25 +282,38 @@
         '<div class="mt-empty-text">Добавь манхву — оценишь рисовку, сюжет, персонажей и всё остальное по отдельности.</div></div>';
     }
 
-    list.forEach(function (m, idx) {
+    list.forEach(function (m) {
       var avg = average(m.criteria);
+      var accent = scoreColor(avg);
       html +=
-        '<div class="mt-paper ' + (idx % 2 === 0 ? "mt-tilt-a" : "mt-tilt-b") + ' mt-card-row" data-card-id="' + m.id + '">' +
+        '<div class="mt-paper mt-card-row" style="--accent:' + accent + '" data-card-id="' + m.id + '">' +
+        '<div class="mt-card-row-inner">' +
         '<div class="mt-card-main" data-open-id="' + m.id + '">' +
         '<div class="mt-card-title">' + escapeHtml(m.title) + "</div>" +
         '<div class="mt-card-meta">' +
-        statusBadgeHtml(m.status, 'data-cycle-id="' + m.id + '"') +
+        statusTagHtml(m.status) +
+        typeTagHtml(m.type || "manhwa") +
         '<span class="mt-meta-count">' + m.criteria.length + " " + criteriaWord(m.criteria.length) + "</span>" +
         "</div></div>" +
         '<div data-open-id="' + m.id + '">' + stampHtml(avg, 58) + "</div>" +
         '<button class="mt-icon-btn" data-delete-id="' + m.id + '" aria-label="Удалить">✕</button>' +
-        "</div>";
+        "</div></div>";
     });
 
     if (state.addingManhwa) {
+      var typeBtns = TYPES.map(function (t) {
+        var active = state.pendingType === t.id;
+        return (
+          '<button class="mt-type-choice' + (active ? " active" : "") + '" data-pick-type="' + t.id +
+          '" style="' + (active ? "background:" + t.color + ";color:#120F1A;border-color:" + t.color :
+            "border-color:" + t.color + "55;color:" + t.color) + '">' + t.label + "</button>"
+        );
+      }).join("");
       html +=
         '<div class="mt-paper">' +
-        '<input class="mt-input" id="new-title-input" placeholder="Название манхвы" />' +
+        '<input class="mt-input" id="new-title-input" placeholder="Название манхвы" value="' +
+        escapeHtml(state.pendingTitleDraft) + '" />' +
+        '<div class="mt-type-row">' + typeBtns + "</div>" +
         '<div class="mt-form-row">' +
         '<button class="mt-primary-btn" id="confirm-add-manhwa">Добавить</button>' +
         '<button class="mt-ghost-btn" id="cancel-add-manhwa">Отмена</button>' +
@@ -283,7 +334,10 @@
       '<button class="mt-icon-btn on-dark" id="back-btn" aria-label="Назад">←</button>' +
       '<div class="mt-detail-title">' + escapeHtml(m.title) + "</div>" +
       "</div>" +
-      '<div class="mt-detail-status">' + statusBadgeHtml(m.status, 'data-cycle-id="' + m.id + '"') + "</div>" +
+      '<div class="mt-detail-status">' +
+      statusBadgeHtml(m.status, 'data-cycle-id="' + m.id + '"') + " " +
+      typeBadgeHtml(m.type || "manhwa", 'data-cycle-type-id="' + m.id + '"') +
+      "</div>" +
       renderErrorBanner() +
       '<div class="mt-detail-body">' +
       '<div class="mt-paper mt-radar-panel">' + radarSvg(m.criteria, {}) + stampHtml(avg, 50) + "</div>" +
@@ -362,7 +416,7 @@
 
     var html =
       '<div class="mt-profile-head">' +
-      '<div class="mt-profile-title">ПРОФИЛЬ<span style="color:#E63950">.</span></div>' +
+      '<div class="mt-profile-title">ПРОФИЛЬ<span style="color:#FF5C77">.</span></div>' +
       '<div class="mt-profile-sub">Статистика по всей библиотеке</div>' +
       "</div>" + renderErrorBanner() +
       '<div class="mt-list">' +
@@ -395,7 +449,7 @@
         '<div class="mt-paper mt-radar-panel" style="align-items:flex-start">' +
         '<div class="mt-panel-title">СРЕДНЕЕ ПО КРИТЕРИЯМ</div>' +
         '<div style="width:100%;display:flex;justify-content:center">' +
-        radarSvg(agg, { fillColor: "#3B6FD9", dotColor: "#D98E2B" }) + "</div></div>";
+        radarSvg(agg, { fillColor: "#6C93FF", dotColor: "#F3A93C" }) + "</div></div>";
     }
 
     if (agg.length > 0) {
@@ -416,12 +470,12 @@
 
     if (top.length > 0) {
       html +=
-        '<div class="mt-paper"><div class="mt-panel-title" style="color:#2E9E6B">ТОП ПО ОЦЕНКЕ</div>' +
+        '<div class="mt-paper"><div class="mt-panel-title" style="color:#34D399">ТОП ПО ОЦЕНКЕ</div>' +
         top.map(miniRowHtml).join("") + "</div>";
     }
     if (bottom.length > 0) {
       html +=
-        '<div class="mt-paper"><div class="mt-panel-title" style="color:#E63950">АУТСАЙДЕРЫ</div>' +
+        '<div class="mt-paper"><div class="mt-panel-title" style="color:#FF5C77">АУТСАЙДЕРЫ</div>' +
         bottom.map(miniRowHtml).join("") + "</div>";
     }
 
@@ -525,6 +579,19 @@
       });
     });
 
+    app.querySelectorAll("[data-cycle-type-id]").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var id = btn.getAttribute("data-cycle-type-id");
+        var m = findManhwa(id);
+        if (!m) return;
+        var idx = TYPES.findIndex(function (t) { return t.id === (m.type || "manhwa"); });
+        m.type = TYPES[(idx + 1) % TYPES.length].id;
+        save();
+        render();
+      });
+    });
+
     // delete manhwa
     app.querySelectorAll("[data-delete-id]").forEach(function (btn) {
       btn.addEventListener("click", function (e) {
@@ -541,6 +608,8 @@
     var startAdd = document.getElementById("start-add-manhwa");
     if (startAdd) startAdd.addEventListener("click", function () {
       state.addingManhwa = true;
+      state.pendingType = "manhwa";
+      state.pendingTitleDraft = "";
       render();
       var inp = document.getElementById("new-title-input");
       if (inp) inp.focus();
@@ -549,7 +618,19 @@
     var cancelAdd = document.getElementById("cancel-add-manhwa");
     if (cancelAdd) cancelAdd.addEventListener("click", function () {
       state.addingManhwa = false;
+      state.pendingTitleDraft = "";
       render();
+    });
+
+    app.querySelectorAll("[data-pick-type]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var draftInput = document.getElementById("new-title-input");
+        state.pendingTitleDraft = draftInput ? draftInput.value : "";
+        state.pendingType = btn.getAttribute("data-pick-type");
+        render();
+        var inp = document.getElementById("new-title-input");
+        if (inp) inp.focus();
+      });
     });
 
     var confirmAdd = document.getElementById("confirm-add-manhwa");
@@ -557,8 +638,10 @@
     function submitNewManhwa() {
       var val = titleInput ? titleInput.value.trim() : "";
       if (!val) return;
-      state.manhwas.push(newManhwa(val));
+      state.manhwas.push(newManhwa(val, state.pendingType));
       state.addingManhwa = false;
+      state.pendingTitleDraft = "";
+      state.pendingType = "manhwa";
       save();
       render();
     }
