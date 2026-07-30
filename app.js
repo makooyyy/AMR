@@ -431,6 +431,17 @@
     }
 
     html +=
+      '<div class="mt-paper"><div class="mt-panel-title">РЕЗЕРВНАЯ КОПИЯ</div>' +
+      '<div class="mt-backup-text">Сохрани файл с оценками себе на телефон — так данные ' +
+      'не потеряются при очистке браузера, и их можно перенести на другое устройство.</div>' +
+      '<div class="mt-form-row">' +
+      '<button class="mt-ghost-btn" id="export-btn" style="flex:1">⭳ Сохранить в файл</button>' +
+      '<button class="mt-ghost-btn" id="import-btn" style="flex:1">⭱ Загрузить из файла</button>' +
+      "</div>" +
+      '<input type="file" id="import-file-input" accept="application/json" style="display:none" />' +
+      "</div>";
+
+    html +=
       '<div class="mt-clear-wrap"><button class="mt-clear-btn' + (state.confirmClear ? " confirm" : "") +
       '" id="clear-all-btn">' +
       (state.confirmClear ? "Точно удалить всё? Нажми ещё раз" : "Очистить все данные") +
@@ -623,6 +634,53 @@
     if (critInput) critInput.addEventListener("keydown", function (e) {
       if (e.key === "Enter") submitNewCrit();
     });
+
+    // export to file
+    var exportBtn = document.getElementById("export-btn");
+    if (exportBtn) exportBtn.addEventListener("click", function () {
+      var blob = new Blob([JSON.stringify(state.manhwas, null, 2)], { type: "application/json" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      var date = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = "manhwa-tracker-backup-" + date + ".json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    // import from file
+    var importBtn = document.getElementById("import-btn");
+    var importInput = document.getElementById("import-file-input");
+    if (importBtn && importInput) {
+      importBtn.addEventListener("click", function () { importInput.click(); });
+      importInput.addEventListener("change", function () {
+        var file = importInput.files && importInput.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function () {
+          try {
+            var parsed = JSON.parse(reader.result);
+            if (!Array.isArray(parsed)) throw new Error("bad format");
+            var replace = state.manhwas.length === 0 ||
+              window.confirm("Заменить текущий список (" + state.manhwas.length +
+                ") данными из файла (" + parsed.length + ")? Текущие оценки будут удалены.");
+            if (replace) {
+              state.manhwas = parsed;
+              state.error = null;
+              save();
+              render();
+            }
+          } catch (e) {
+            state.error = "Не удалось прочитать файл — проверь, что это резервная копия из этого приложения.";
+            render();
+          }
+        };
+        reader.readAsText(file);
+        importInput.value = "";
+      });
+    }
 
     // clear all
     var clearBtn = document.getElementById("clear-all-btn");

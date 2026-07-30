@@ -214,6 +214,8 @@ input[type="range"].mt-slider::-moz-range-thumb {
 }
 .mt-mini-score { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 14px; }
 
+.mt-backup-text { color: #6B6558; font-size: 12.5px; margin-bottom: 10px; line-height: 1.4; }
+
 .mt-clear-wrap { display: flex; justify-content: center; margin-top: 6px; }
 .mt-clear-btn {
   background: transparent; border: 1.5px solid #4A463C; color: #8B8578;
