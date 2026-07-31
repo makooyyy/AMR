@@ -18,16 +18,31 @@
     { id: "manhua", label: "Маньхуа", color: "#F3A93C" }
   ];
 
+  var GENRE_SUGGESTIONS = [
+    "Экшн", "Романтика", "Фэнтези", "Драма", "Комедия", "Ужасы",
+    "Триллер", "Приключения", "Повседневность", "Школа", "Сверхъестественное",
+    "Психология", "Спорт", "Меха", "Гарем", "Трагедия"
+  ];
+
+  var GENRES = [
+    "Экшн", "Романтика", "Фэнтези", "Драма", "Комедия", "Ужасы",
+    "Триллер", "Спорт", "Повседневность", "Сверхъестественное",
+    "Исекай", "Гарем", "Школа", "Приключения", "Мистика", "Психология"
+  ];
+
   var state = {
     manhwas: [],
     tab: "library",
     selectedId: null,
     sortMode: "recent",
     filterStatus: "all",
+    filterGenre: "all",
     searchQuery: "",
     addingManhwa: false,
     pendingType: "manhwa",
     pendingTitleDraft: "",
+    pendingCoverDraft: "",
+    pendingGenreDraft: "",
     addingCriterion: false,
     confirmClear: false,
     confirmDeleteId: null,
@@ -77,13 +92,15 @@
     return "критериев";
   }
 
-  function newManhwa(title, type) {
+  function newManhwa(title, type, coverUrl) {
     return {
       id: uid(),
       title: title,
       status: "reading",
       type: type || "manhwa",
       rated: false,
+      coverUrl: coverUrl || "",
+      genres: [],
       altTitles: { en: "", ja: "", ru: "" },
       criteria: DEFAULT_CRITERIA.map(function (name) {
         return { id: uid(), name: name, score: 5 };
@@ -240,6 +257,7 @@
   /* ---------- view: library ---------- */
   function matchesQuery(m, q) {
     if (m.title.toLowerCase().indexOf(q) !== -1) return true;
+    if (m.genres && m.genres.some(function (g) { return g.toLowerCase().indexOf(q) !== -1; })) return true;
     var alt = m.altTitles;
     if (!alt) return false;
     return Object.keys(alt).some(function (k) {
@@ -247,10 +265,23 @@
     });
   }
 
+  function allGenresSorted() {
+    var counts = {};
+    state.manhwas.forEach(function (m) {
+      (m.genres || []).forEach(function (g) {
+        counts[g] = (counts[g] || 0) + 1;
+      });
+    });
+    return Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; });
+  }
+
   function sortedManhwas() {
     var arr = state.manhwas.slice();
     if (state.filterStatus !== "all") {
       arr = arr.filter(function (m) { return m.status === state.filterStatus; });
+    }
+    if (state.filterGenre !== "all") {
+      arr = arr.filter(function (m) { return (m.genres || []).indexOf(state.filterGenre) !== -1; });
     }
     if (state.searchQuery.trim()) {
       var q = state.searchQuery.trim().toLowerCase();
@@ -295,6 +326,21 @@
       ? '<button class="mt-search-clear" id="search-clear-btn" aria-label="Очистить поиск">✕</button>'
       : "";
 
+    var genreList = allGenresSorted();
+    var genreRow = "";
+    if (genreList.length > 0) {
+      var genreChips = [{ id: "all", label: "Все жанры" }]
+        .concat(genreList.map(function (g) { return { id: g, label: g }; }))
+        .map(function (g) {
+          var active = state.filterGenre === g.id;
+          return (
+            '<button class="mt-genre-filter-chip' + (active ? " active" : "") + '" data-genre-filter="' +
+            escapeHtml(g.id) + '">' + escapeHtml(g.label) + "</button>"
+          );
+        }).join("");
+      genreRow = '<div class="mt-genre-filter-row">' + genreChips + "</div>";
+    }
+
     return (
       '<div class="mt-header">' +
       '<div class="mt-title">МАНХВА<span class="accent">•</span>ТРЕКЕР</div>' +
@@ -303,10 +349,11 @@
       '<div class="mt-sort-group">' + btns + "</div>" +
       "</div>" +
       '<div class="mt-search-wrap">' +
-      '<input class="mt-input mt-search-input" id="search-input" placeholder="Поиск по названию…" value="' +
+      '<input class="mt-input mt-search-input" id="search-input" placeholder="Поиск по названию или жанру…" value="' +
       escapeHtml(query) + '" />' + clearBtn +
       "</div>" +
       '<div class="mt-filter-row">' + filterBtns + "</div>" +
+      genreRow +
       "</div>"
     );
   }
@@ -317,8 +364,10 @@
   }
 
   function renderLibrary() {
-    var html = renderHeader() + renderErrorBanner() + '<div class="mt-list">';
+    var html = renderHeader() + renderErrorBanner();
     var list = sortedManhwas();
+
+    html += '<div class="mt-list">';
 
     if (list.length === 0 && !state.addingManhwa) {
       var noneAtAll = state.manhwas.length === 0;
@@ -326,28 +375,38 @@
         ? '<div class="mt-paper mt-empty"><div class="mt-empty-title">Пока пусто</div>' +
           '<div class="mt-empty-text">Добавь манхву — оценишь рисовку, сюжет, персонажей и всё остальное по отдельности.</div></div>'
         : '<div class="mt-paper mt-empty"><div class="mt-empty-title">Ничего не найдено</div>' +
-          '<div class="mt-empty-text">Попробуй изменить поиск или фильтр по статусу.</div></div>';
+          '<div class="mt-empty-text">Попробуй изменить поиск или фильтр.</div></div>';
     }
 
-    list.forEach(function (m) {
-      var avg = average(m.criteria);
-      var accent = scoreColor(avg);
-      html +=
-        '<div class="mt-paper mt-card-row" style="--accent:' + accent + '" data-card-id="' + m.id + '">' +
-        '<div class="mt-card-row-inner">' +
-        '<div class="mt-card-main" data-open-id="' + m.id + '">' +
-        '<div class="mt-card-title">' + escapeHtml(m.title) + "</div>" +
-        '<div class="mt-card-meta">' +
-        statusTagHtml(m.status) +
-        typeTagHtml(m.type || "manhwa") +
-        '<span class="mt-meta-count">' + m.criteria.length + " " + criteriaWord(m.criteria.length) + "</span>" +
-        "</div></div>" +
-        '<div data-open-id="' + m.id + '">' + stampHtml(avg, 58) + "</div>" +
-        '<button class="mt-icon-btn' + (state.confirmDeleteId === m.id ? " mt-delete-confirm" : "") +
-        '" data-delete-id="' + m.id + '" aria-label="Удалить">' +
-        (state.confirmDeleteId === m.id ? "Точно?" : "✕") + "</button>" +
-        "</div></div>";
-    });
+    if (list.length > 0) {
+      html += '<div class="mt-grid">';
+      list.forEach(function (m) {
+        var avg = average(m.criteria);
+        var accent = scoreColor(avg);
+        var st = statusById(m.status);
+        var ty = typeById(m.type || "manhwa");
+        var confirming = state.confirmDeleteId === m.id;
+        var coverStyle = m.coverUrl
+          ? "background-image:url('" + escapeHtml(m.coverUrl).replace(/'/g, "%27") + "')"
+          : "";
+
+        html +=
+          '<div class="mt-grid-card">' +
+          '<div class="mt-cover' + (m.coverUrl ? "" : " mt-cover-empty") + '" style="' + coverStyle +
+          '" data-open-id="' + m.id + '">' +
+          (m.coverUrl ? "" : '<span class="mt-cover-fallback">' + escapeHtml((m.title[0] || "?").toUpperCase()) + "</span>") +
+          '<span class="mt-cover-status" style="background:' + st.color + '">' + st.label + "</span>" +
+          '<span class="mt-cover-type">' + ty.label + "</span>" +
+          '<span class="mt-cover-stamp" style="border-color:' + accent + ";color:" + accent + '">' +
+          (avg === null ? "–" : avg.toFixed(1)) + "</span>" +
+          '<button class="mt-cover-delete' + (confirming ? " confirm" : "") + '" data-delete-id="' + m.id +
+          '" aria-label="Удалить">' + (confirming ? "!" : "✕") + "</button>" +
+          "</div>" +
+          '<div class="mt-cover-title" data-open-id="' + m.id + '">' + escapeHtml(m.title) + "</div>" +
+          "</div>";
+      });
+      html += "</div>";
+    }
 
     if (state.addingManhwa) {
       var typeBtns = TYPES.map(function (t) {
@@ -362,6 +421,8 @@
         '<div class="mt-paper">' +
         '<input class="mt-input" id="new-title-input" placeholder="Название манхвы" value="' +
         escapeHtml(state.pendingTitleDraft) + '" />' +
+        '<input class="mt-input" id="new-cover-input" placeholder="Ссылка на обложку (необязательно)" ' +
+        'style="margin-top:8px" value="' + escapeHtml(state.pendingCoverDraft) + '" />' +
         '<div class="mt-type-row">' + typeBtns + "</div>" +
         '<div class="mt-form-row">' +
         '<button class="mt-primary-btn" id="confirm-add-manhwa">Добавить</button>' +
@@ -398,6 +459,56 @@
     );
   }
 
+  function renderCoverPanel(m) {
+    var url = m.coverUrl || "";
+    var preview = url
+      ? '<div class="mt-cover-preview" style="background-image:url(\'' + escapeHtml(url).replace(/'/g, "%27") + "')\"></div>"
+      : '<div class="mt-cover-preview mt-cover-preview-empty">нет обложки</div>';
+    return (
+      '<div class="mt-paper">' +
+      '<div class="mt-panel-title">ОБЛОЖКА</div>' +
+      '<div class="mt-cover-panel-row">' +
+      preview +
+      '<input class="mt-input" id="cover-url-input" placeholder="Ссылка на изображение (URL)" value="' +
+      escapeHtml(url) + '" />' +
+      "</div></div>"
+    );
+  }
+
+  function renderGenresPanel(m) {
+    var genres = m.genres || [];
+    var chips = genres.length
+      ? genres.map(function (g) {
+          return (
+            '<span class="mt-genre-chip">' + escapeHtml(g) +
+            ' <button class="mt-genre-remove" data-remove-genre="' + escapeHtml(g) +
+            '" data-manhwa-id="' + m.id + '" aria-label="Убрать жанр">✕</button></span>'
+          );
+        }).join("")
+      : '<span class="mt-empty-text" style="font-size:12px">Пока нет жанров</span>';
+
+    var suggestions = GENRE_SUGGESTIONS.filter(function (g) { return genres.indexOf(g) === -1; });
+    var suggBtns = suggestions.map(function (g) {
+      return (
+        '<button class="mt-genre-suggest" data-add-genre="' + escapeHtml(g) +
+        '" data-manhwa-id="' + m.id + '">+ ' + escapeHtml(g) + "</button>"
+      );
+    }).join("");
+
+    return (
+      '<div class="mt-paper">' +
+      '<div class="mt-panel-title">ЖАНРЫ</div>' +
+      '<div class="mt-genre-list">' + chips + "</div>" +
+      (suggBtns ? '<div class="mt-genre-suggest-row">' + suggBtns + "</div>" : "") +
+      '<div class="mt-form-row">' +
+      '<input class="mt-input" id="new-genre-input" placeholder="Свой жанр" value="' +
+      escapeHtml(state.pendingGenreDraft) + '" />' +
+      '<button class="mt-primary-btn" id="add-genre-btn" data-manhwa-id="' + m.id +
+      '" style="flex:0 0 auto;padding:10px 16px">+</button>' +
+      "</div></div>"
+    );
+  }
+
   function renderDetail(m) {
     var avg = average(m.criteria);
     var isNew = m.rated === false;
@@ -415,7 +526,9 @@
       "</div>" +
       renderErrorBanner() +
       '<div class="mt-detail-body">' +
+      renderCoverPanel(m) +
       renderAltTitlesPanel(m) +
+      renderGenresPanel(m) +
       '<div class="mt-paper mt-radar-panel">' + radarSvg(m.criteria, {}) + stampHtml(avg, 50) + "</div>" +
       '<div class="mt-paper mt-criteria-panel">';
 
@@ -559,6 +672,32 @@
       html += '<div class="mt-paper"><div class="mt-panel-title">ЧТО ТЫ ЦЕНИШЬ ВЫШЕ ВСЕГО</div>' + bars + "</div>";
     }
 
+    var genreStats = {};
+    state.manhwas.forEach(function (m) {
+      (m.genres || []).forEach(function (g) {
+        if (!genreStats[g]) genreStats[g] = { count: 0, sum: 0, rated: 0 };
+        genreStats[g].count += 1;
+        var av = average(m.criteria);
+        if (av !== null) { genreStats[g].sum += av; genreStats[g].rated += 1; }
+      });
+    });
+    var genreNames = Object.keys(genreStats).sort(function (a, b) { return genreStats[b].count - genreStats[a].count; }).slice(0, 8);
+    if (genreNames.length > 0) {
+      var maxCount = Math.max.apply(null, genreNames.map(function (g) { return genreStats[g].count; }));
+      var genreBars = genreNames.map(function (g) {
+        var s = genreStats[g];
+        var avgScore = s.rated ? s.sum / s.rated : null;
+        var color = scoreColor(avgScore);
+        return (
+          '<div class="mt-bar-row"><span class="mt-bar-name">' + escapeHtml(g) + "</span>" +
+          '<div class="mt-bar-track"><div class="mt-bar-fill" style="width:' + (s.count / maxCount) * 100 +
+          "%;background:" + color + ';"></div></div>' +
+          '<span class="mt-bar-value" style="color:' + color + '">' + s.count + "</span></div>"
+        );
+      }).join("");
+      html += '<div class="mt-paper"><div class="mt-panel-title">ЛЮБИМЫЕ ЖАНРЫ</div>' + genreBars + "</div>";
+    }
+
     var sortedByScore = rated.slice().sort(function (a, b) { return average(b.criteria) - average(a.criteria); });
     var top = sortedByScore.slice(0, 3);
     var bottom = sortedByScore.slice(-3).reverse().filter(function (m) { return top.indexOf(m) === -1; });
@@ -674,6 +813,13 @@
       });
     });
 
+    app.querySelectorAll("[data-genre-filter]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        state.filterGenre = btn.getAttribute("data-genre-filter");
+        render();
+      });
+    });
+
     var searchInput = document.getElementById("search-input");
     if (searchInput) {
       searchInput.addEventListener("input", function () {
@@ -756,6 +902,7 @@
       state.addingManhwa = true;
       state.pendingType = "manhwa";
       state.pendingTitleDraft = "";
+      state.pendingCoverDraft = "";
       render();
       var inp = document.getElementById("new-title-input");
       if (inp) inp.focus();
@@ -765,13 +912,16 @@
     if (cancelAdd) cancelAdd.addEventListener("click", function () {
       state.addingManhwa = false;
       state.pendingTitleDraft = "";
+      state.pendingCoverDraft = "";
       render();
     });
 
     app.querySelectorAll("[data-pick-type]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var draftInput = document.getElementById("new-title-input");
+        var coverInput = document.getElementById("new-cover-input");
         state.pendingTitleDraft = draftInput ? draftInput.value : "";
+        state.pendingCoverDraft = coverInput ? coverInput.value : "";
         state.pendingType = btn.getAttribute("data-pick-type");
         render();
         var inp = document.getElementById("new-title-input");
@@ -781,12 +931,15 @@
 
     var confirmAdd = document.getElementById("confirm-add-manhwa");
     var titleInput = document.getElementById("new-title-input");
+    var coverInputEl = document.getElementById("new-cover-input");
     function submitNewManhwa() {
       var val = titleInput ? titleInput.value.trim() : "";
       if (!val) return;
-      state.manhwas.push(newManhwa(val, state.pendingType));
+      var coverVal = coverInputEl ? coverInputEl.value.trim() : "";
+      state.manhwas.push(newManhwa(val, state.pendingType, coverVal));
       state.addingManhwa = false;
       state.pendingTitleDraft = "";
+      state.pendingCoverDraft = "";
       state.pendingType = "manhwa";
       save();
       render();
@@ -802,6 +955,7 @@
       if (state.selectedId) delete state.unlockedIds[state.selectedId];
       state.selectedId = null;
       state.addingCriterion = false;
+      state.pendingGenreDraft = "";
       render();
     });
 
@@ -854,6 +1008,64 @@
       input.addEventListener("blur", function () {
         save();
       });
+    });
+
+    var coverInput = document.getElementById("cover-url-input");
+    if (coverInput) {
+      coverInput.addEventListener("input", function () {
+        if (!selected) return;
+        selected.coverUrl = coverInput.value;
+      });
+      coverInput.addEventListener("blur", function () {
+        save();
+        render();
+      });
+    }
+
+    app.querySelectorAll("[data-add-genre]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.getAttribute("data-manhwa-id");
+        var m = findManhwa(id);
+        if (!m) return;
+        var genre = btn.getAttribute("data-add-genre");
+        if (!m.genres) m.genres = [];
+        if (m.genres.indexOf(genre) === -1) m.genres.push(genre);
+        var draftEl = document.getElementById("new-genre-input");
+        state.pendingGenreDraft = draftEl ? draftEl.value : "";
+        save();
+        render();
+      });
+    });
+
+    app.querySelectorAll("[data-remove-genre]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.getAttribute("data-manhwa-id");
+        var m = findManhwa(id);
+        if (!m) return;
+        var genre = btn.getAttribute("data-remove-genre");
+        m.genres = (m.genres || []).filter(function (g) { return g !== genre; });
+        var draftEl = document.getElementById("new-genre-input");
+        state.pendingGenreDraft = draftEl ? draftEl.value : "";
+        save();
+        render();
+      });
+    });
+
+    var addGenreBtn = document.getElementById("add-genre-btn");
+    var genreInput = document.getElementById("new-genre-input");
+    if (addGenreBtn) addGenreBtn.addEventListener("click", function () {
+      var id = addGenreBtn.getAttribute("data-manhwa-id");
+      var m = findManhwa(id);
+      var val = genreInput ? genreInput.value.trim() : "";
+      if (!m || !val) return;
+      if (!m.genres) m.genres = [];
+      if (m.genres.indexOf(val) === -1) m.genres.push(val);
+      state.pendingGenreDraft = "";
+      save();
+      render();
+    });
+    if (genreInput) genreInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && addGenreBtn) addGenreBtn.click();
     });
 
     app.querySelectorAll("[data-delete-crit]").forEach(function (btn) {

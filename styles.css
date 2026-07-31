@@ -113,6 +113,94 @@ body {
 }
 .mt-sort-btn.active { background: var(--red); color: #1A0E12; border-color: transparent; }
 
+/* ---- cover grid ---- */
+.mt-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 4px;
+}
+.mt-grid-card { display: flex; flex-direction: column; gap: 6px; }
+.mt-cover {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  border-radius: 10px;
+  background-size: cover;
+  background-position: center;
+  background-color: var(--card-top);
+  border: 1px solid var(--card-border);
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+}
+.mt-cover-empty {
+  background-image: linear-gradient(165deg, var(--card-top), var(--card-bottom));
+  display: flex; align-items: center; justify-content: center;
+}
+.mt-cover-fallback {
+  font-family: 'Bebas Neue', sans-serif; font-size: 40px; color: rgba(255,255,255,0.14);
+}
+.mt-cover-status {
+  position: absolute; top: 6px; left: 6px; right: 6px;
+  font-size: 9px; font-weight: 800; color: #120F1A; text-align: center;
+  padding: 3px 4px; border-radius: 6px; letter-spacing: 0.2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mt-cover-type {
+  position: absolute; left: 6px; bottom: 6px;
+  font-size: 9px; font-weight: 800; color: #F3EEFA;
+  background: rgba(0,0,0,0.55); padding: 3px 6px; border-radius: 6px;
+  backdrop-filter: blur(2px);
+}
+.mt-cover-stamp {
+  position: absolute; right: 6px; bottom: 6px;
+  font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700;
+  background: rgba(18,15,26,0.75); border: 1.5px solid; border-radius: 6px;
+  padding: 2px 5px;
+}
+.mt-cover-delete {
+  position: absolute; top: 6px; right: 6px;
+  width: 22px; height: 22px; border-radius: 50%; border: none;
+  background: rgba(0,0,0,0.55); color: #F3EEFA; font-size: 11px;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.mt-cover-delete.confirm { background: var(--red); color: #120F1A; font-weight: 800; }
+.mt-cover-title {
+  font-size: 12.5px; font-weight: 700; color: var(--text-primary); line-height: 1.25;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  cursor: pointer;
+}
+
+.mt-genre-filter-row { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; overflow-x: auto; }
+.mt-genre-filter-chip {
+  border-radius: 20px; padding: 4px 10px; font-size: 11px; font-weight: 700;
+  font-family: 'Manrope', sans-serif; cursor: pointer; white-space: nowrap;
+  border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.03); color: var(--text-muted);
+}
+.mt-genre-filter-chip.active { background: var(--blue); color: #120F1A; border-color: transparent; }
+
+.mt-cover-panel-row { display: flex; gap: 12px; align-items: center; }
+.mt-cover-preview {
+  width: 56px; height: 80px; border-radius: 8px; flex-shrink: 0;
+  background-size: cover; background-position: center; background-color: var(--input-bg);
+  border: 1px solid rgba(255,255,255,0.1);
+  display: flex; align-items: center; justify-content: center;
+}
+.mt-cover-preview-empty { color: var(--text-faint); font-size: 9px; text-align: center; padding: 4px; }
+
+.mt-genre-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.mt-genre-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(108,147,255,0.14); color: #A9C0FF; border: 1px solid rgba(108,147,255,0.35);
+  border-radius: 20px; padding: 4px 6px 4px 10px; font-size: 11.5px; font-weight: 700;
+}
+.mt-genre-remove { background: none; border: none; color: #A9C0FF; cursor: pointer; font-size: 10px; padding: 2px; }
+.mt-genre-suggest-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.mt-genre-suggest {
+  background: rgba(255,255,255,0.04); border: 1px dashed rgba(255,255,255,0.16); color: var(--text-muted);
+  border-radius: 20px; padding: 4px 10px; font-size: 11px; font-weight: 700; cursor: pointer;
+}
+
 .mt-list { padding: 6px 16px 110px; display: flex; flex-direction: column; gap: 16px; }
 
 .mt-card-row-inner { display: flex; align-items: center; gap: 14px; }
