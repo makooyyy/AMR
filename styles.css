@@ -104,6 +104,12 @@ body {
   border-radius: 20px; padding: 5px 12px; font-size: 12px; font-weight: 700;
   font-family: 'Manrope', sans-serif; cursor: pointer; border: 1.5px solid; background: transparent;
 }
+.mt-genre-toggle-chip {
+  border-radius: 20px; padding: 5px 12px; font-size: 12px; font-weight: 700;
+  font-family: 'Manrope', sans-serif; cursor: pointer;
+  border: 1.5px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.04); color: var(--text-muted);
+}
+.mt-genre-toggle-chip.active { background: var(--blue); color: #120F1A; border-color: transparent; }
 
 .mt-sort-group { display: flex; gap: 6px; }
 .mt-sort-btn {

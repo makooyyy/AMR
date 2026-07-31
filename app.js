@@ -37,6 +37,7 @@
     sortMode: "recent",
     filterStatus: "all",
     filterGenre: "all",
+    showGenreFilter: false,
     searchQuery: "",
     addingManhwa: false,
     pendingType: "manhwa",
@@ -310,8 +311,7 @@
       );
     }).join("");
 
-    var filters = [{ id: "all", label: "Все", color: "#9A93AE" }].concat(STATUSES);
-    var filterBtns = filters.map(function (f) {
+    var filterBtns = STATUSES.map(function (f) {
       var active = state.filterStatus === f.id;
       return (
         '<button class="mt-filter-chip' + (active ? " active" : "") + '" data-filter="' + f.id +
@@ -327,8 +327,9 @@
       : "";
 
     var genreList = allGenresSorted();
-    var genreRow = "";
-    if (genreList.length > 0) {
+    var genreToggleLabel = "🔍 Жанры" + (state.filterGenre !== "all" ? ": " + state.filterGenre : "");
+    var genrePanel = "";
+    if (genreList.length > 0 && state.showGenreFilter) {
       var genreChips = [{ id: "all", label: "Все жанры" }]
         .concat(genreList.map(function (g) { return { id: g, label: g }; }))
         .map(function (g) {
@@ -338,7 +339,7 @@
             escapeHtml(g.id) + '">' + escapeHtml(g.label) + "</button>"
           );
         }).join("");
-      genreRow = '<div class="mt-genre-filter-row">' + genreChips + "</div>";
+      genrePanel = '<div class="mt-genre-filter-row">' + genreChips + "</div>";
     }
 
     return (
@@ -352,8 +353,13 @@
       '<input class="mt-input mt-search-input" id="search-input" placeholder="Поиск по названию или жанру…" value="' +
       escapeHtml(query) + '" />' + clearBtn +
       "</div>" +
-      '<div class="mt-filter-row">' + filterBtns + "</div>" +
-      genreRow +
+      '<div class="mt-filter-row">' + filterBtns +
+      (genreList.length > 0
+        ? '<button class="mt-genre-toggle-chip' + (state.showGenreFilter ? " active" : "") +
+          '" id="genre-filter-toggle">' + genreToggleLabel + "</button>"
+        : "") +
+      "</div>" +
+      genrePanel +
       "</div>"
     );
   }
@@ -385,7 +391,6 @@
         var accent = scoreColor(avg);
         var st = statusById(m.status);
         var ty = typeById(m.type || "manhwa");
-        var confirming = state.confirmDeleteId === m.id;
         var coverStyle = m.coverUrl
           ? "background-image:url('" + escapeHtml(m.coverUrl).replace(/'/g, "%27") + "')"
           : "";
@@ -399,8 +404,6 @@
           '<span class="mt-cover-type">' + ty.label + "</span>" +
           '<span class="mt-cover-stamp" style="border-color:' + accent + ";color:" + accent + '">' +
           (avg === null ? "–" : avg.toFixed(1)) + "</span>" +
-          '<button class="mt-cover-delete' + (confirming ? " confirm" : "") + '" data-delete-id="' + m.id +
-          '" aria-label="Удалить">' + (confirming ? "!" : "✕") + "</button>" +
           "</div>" +
           '<div class="mt-cover-title" data-open-id="' + m.id + '">' + escapeHtml(m.title) + "</div>" +
           "</div>";
@@ -580,6 +583,11 @@
     }
 
     html += renderGenresPanel(m) + renderAltTitlesPanel(m) + renderCoverPanel(m);
+
+    var confirmingDelete = state.confirmDeleteId === m.id;
+    html += '<button class="mt-clear-btn' + (confirmingDelete ? " confirm" : "") +
+      '" data-delete-id="' + m.id + '" style="width:100%">' +
+      (confirmingDelete ? "Точно удалить? Нажми ещё раз" : "Удалить манхву") + "</button>";
 
     html += "</div>";
     return html;
@@ -807,14 +815,22 @@
 
     app.querySelectorAll("[data-filter]").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        state.filterStatus = btn.getAttribute("data-filter");
+        var id = btn.getAttribute("data-filter");
+        state.filterStatus = state.filterStatus === id ? "all" : id;
         render();
       });
+    });
+
+    var genreToggle = document.getElementById("genre-filter-toggle");
+    if (genreToggle) genreToggle.addEventListener("click", function () {
+      state.showGenreFilter = !state.showGenreFilter;
+      render();
     });
 
     app.querySelectorAll("[data-genre-filter]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         state.filterGenre = btn.getAttribute("data-genre-filter");
+        state.showGenreFilter = false;
         render();
       });
     });
