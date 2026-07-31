@@ -526,9 +526,6 @@
       "</div>" +
       renderErrorBanner() +
       '<div class="mt-detail-body">' +
-      renderCoverPanel(m) +
-      renderAltTitlesPanel(m) +
-      renderGenresPanel(m) +
       '<div class="mt-paper mt-radar-panel">' + radarSvg(m.criteria, {}) + stampHtml(avg, 50) + "</div>" +
       '<div class="mt-paper mt-criteria-panel">';
 
@@ -581,6 +578,8 @@
       html += '<button class="mt-ghost-btn" id="unlock-rating-btn" data-manhwa-id="' + m.id +
         '" style="width:100%">✎ Изменить оценку</button>';
     }
+
+    html += renderGenresPanel(m) + renderAltTitlesPanel(m) + renderCoverPanel(m);
 
     html += "</div>";
     return html;
