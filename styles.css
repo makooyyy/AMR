@@ -142,9 +142,9 @@ body {
   font-family: 'Bebas Neue', sans-serif; font-size: 40px; color: rgba(255,255,255,0.14);
 }
 .mt-cover-status {
-  position: absolute; top: 6px; left: 6px; right: 6px;
-  font-size: 9px; font-weight: 800; color: #120F1A; text-align: center;
-  padding: 3px 4px; border-radius: 6px; letter-spacing: 0.2px;
+  position: absolute; top: 6px; left: 6px; max-width: calc(100% - 34px);
+  font-size: 9px; font-weight: 800; color: #120F1A; text-align: left;
+  padding: 3px 7px; border-radius: 8px; letter-spacing: 0.2px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .mt-cover-type {
