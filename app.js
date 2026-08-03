@@ -24,11 +24,28 @@
     "Психология", "Спорт", "Меха", "Гарем", "Трагедия"
   ];
 
-  var GENRES = [
-    "Экшн", "Романтика", "Фэнтези", "Драма", "Комедия", "Ужасы",
-    "Триллер", "Спорт", "Повседневность", "Сверхъестественное",
-    "Исекай", "Гарем", "Школа", "Приключения", "Мистика", "Психология"
+  var TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+
+  var EMOTION_LABELS = [
+    "Пожалел о каждой потраченной минуте",
+    "Плохо, раздражало",
+    "Средне, не жалею, но и не запомнил",
+    "Хорошо, получил удовольствие",
+    "Шедевр, буду перечитывать / помню спустя годы"
   ];
+
+  var POSITIVE_TAGS = [
+    "Сильный мейн-герой", "Неожиданные повороты", "Прекрасная химия между героями",
+    "Уникальный сеттинг", "Отличная комедия", "Красивые боевые сцены",
+    "Глубокий лор", "Короткие, но ёмкие главы"
+  ];
+
+  var NEGATIVE_TAGS = [
+    "Затянуто", "Падение качества арта", "Нелогичные поступки героев",
+    "Переизбыток клише", "Слабый финал", "Проблемы с переводом", "Слишком много филлера"
+  ];
+
+  var lastViewKey = null;
 
   var state = {
     manhwas: [],
@@ -76,6 +93,26 @@
     return "#34D399";
   }
 
+  // "legacy" — manhwa added before the two-phase system existed, skip straight to normal rating
+  // "phase1" — needs the quick emotional pick first
+  // "waiting" — emotion picked, 12h cooldown not over yet
+  // "phase2" — cooldown over (or legacy), full criteria available
+  function ratingPhase(m) {
+    if (m.emotionRating === undefined) return "legacy";
+    if (m.emotionRating === null) return "phase1";
+    var elapsed = Date.now() - (m.emotionRatedAt || 0);
+    if (elapsed < TWELVE_HOURS_MS) return "waiting";
+    return "phase2";
+  }
+
+  function formatRemaining(ms) {
+    var totalMinutes = Math.max(0, Math.ceil(ms / 60000));
+    var h = Math.floor(totalMinutes / 60);
+    var m = totalMinutes % 60;
+    if (h <= 0) return m + " мин";
+    return h + " ч " + m + " мин";
+  }
+
   function statusById(id) {
     for (var i = 0; i < STATUSES.length; i++) if (STATUSES[i].id === id) return STATUSES[i];
     return STATUSES[0];
@@ -100,6 +137,9 @@
       status: "reading",
       type: type || "manhwa",
       rated: false,
+      emotionRating: null,
+      emotionRatedAt: null,
+      tags: [],
       coverUrl: coverUrl || "",
       genres: [],
       altTitles: { en: "", ja: "", ru: "" },
@@ -512,24 +552,49 @@
     );
   }
 
-  function renderDetail(m) {
-    var avg = average(m.criteria);
+  function renderRatingSection(m, avg) {
+    var phase = ratingPhase(m);
+
+    if (phase === "phase1") {
+      var stars = "";
+      for (var i = 1; i <= 5; i++) {
+        stars += '<button class="mt-emotion-star" data-emotion-pick="' + i +
+          '" data-manhwa-id="' + m.id + '" aria-label="' + i + ' звёзд">★</button>';
+      }
+      return (
+        '<div class="mt-paper mt-emotion-panel">' +
+        '<div class="mt-panel-title">ПЕРВОЕ ВПЕЧАТЛЕНИЕ</div>' +
+        '<div class="mt-emotion-hint">Оцени по горячим следам, сразу после прочтения — это только эмоция и на числовой рейтинг не повлияет. Полная оценка откроется через 12 часов.</div>' +
+        '<div class="mt-emotion-stars">' + stars + "</div>" +
+        "</div>"
+      );
+    }
+
+    if (phase === "waiting") {
+      var remaining = TWELVE_HOURS_MS - (Date.now() - (m.emotionRatedAt || 0));
+      var pickedStars = "";
+      for (var j = 1; j <= 5; j++) {
+        pickedStars += '<span class="mt-emotion-star-static' + (j <= m.emotionRating ? " filled" : "") + '">★</span>';
+      }
+      return (
+        '<div class="mt-paper mt-emotion-panel">' +
+        '<div class="mt-panel-title">ПЕРВОЕ ВПЕЧАТЛЕНИЕ</div>' +
+        '<div class="mt-emotion-stars-static">' + pickedStars + "</div>" +
+        '<div class="mt-emotion-label">' + escapeHtml(EMOTION_LABELS[m.emotionRating - 1]) + "</div>" +
+        '<div class="mt-wait-lock">' +
+        '<div class="mt-wait-lock-icon">⏳</div>' +
+        '<div class="mt-wait-lock-text">Полная оценка откроется через <b>' + formatRemaining(remaining) +
+        "</b><br>Фаза осмысления снижает влияние сиюминутных эмоций — клиффхэнгеров, обид, восторга.</div>" +
+        "</div></div>"
+      );
+    }
+
+    // phase === "legacy" or "phase2" — full criteria available
     var isNew = m.rated === false;
     var unlocked = !!state.unlockedIds[m.id];
     var editable = isNew || unlocked;
 
-    var html =
-      '<div class="mt-detail-head">' +
-      '<button class="mt-icon-btn on-dark" id="back-btn" aria-label="Назад">←</button>' +
-      '<div class="mt-detail-title">' + escapeHtml(m.title) + "</div>" +
-      "</div>" +
-      '<div class="mt-detail-status">' +
-      statusBadgeHtml(m.status, 'data-cycle-id="' + m.id + '"') + " " +
-      typeBadgeHtml(m.type || "manhwa", 'data-cycle-type-id="' + m.id + '"') +
-      "</div>" +
-      renderErrorBanner() +
-      '<div class="mt-detail-body">' +
-      '<div class="mt-paper mt-radar-panel">' + radarSvg(m.criteria, {}) + stampHtml(avg, 50) + "</div>" +
+    var html = '<div class="mt-paper mt-radar-panel">' + radarSvg(m.criteria, {}) + stampHtml(avg, 50) + "</div>" +
       '<div class="mt-paper mt-criteria-panel">';
 
     if (editable) {
@@ -581,6 +646,62 @@
       html += '<button class="mt-ghost-btn" id="unlock-rating-btn" data-manhwa-id="' + m.id +
         '" style="width:100%">✎ Изменить оценку</button>';
     }
+
+    html += renderTagsPanel(m);
+    return html;
+  }
+
+  function renderTagsPanel(m) {
+    var tags = m.tags || [];
+    var atLimit = tags.length >= 3;
+
+    function chip(label, positive) {
+      var selected = tags.indexOf(label) !== -1;
+      var disabled = !selected && atLimit;
+      var color = positive ? "#34D399" : "#FF5C77";
+      var style = selected
+        ? "background:" + color + ";color:#120F1A;border-color:" + color
+        : disabled
+        ? "border-color:rgba(255,255,255,0.08);color:var(--text-faint);opacity:0.5"
+        : "border-color:" + color + "55;color:" + color;
+      return (
+        '<button class="mt-tag-chip"' + (disabled ? " disabled" : "") + ' data-toggle-tag="' +
+        escapeHtml(label) + '" data-manhwa-id="' + m.id + '" style="' + style + '">' +
+        (selected ? "✓ " : "") + escapeHtml(label) + "</button>"
+      );
+    }
+
+    var posChips = POSITIVE_TAGS.map(function (t) { return chip(t, true); }).join("");
+    var negChips = NEGATIVE_TAGS.map(function (t) { return chip(t, false); }).join("");
+
+    return (
+      '<div class="mt-paper">' +
+      '<div class="mt-panel-title">СИЛЬНЫЕ / СЛАБЫЕ СТОРОНЫ</div>' +
+      '<div class="mt-tag-hint">До 3 тегов, которые лучше всего описывают тайтл' +
+      (atLimit ? " — лимит достигнут, сними один, чтобы выбрать другой" : "") + "</div>" +
+      '<div class="mt-tag-group-label mt-tag-group-pos">Сильные стороны</div>' +
+      '<div class="mt-tag-row">' + posChips + "</div>" +
+      '<div class="mt-tag-group-label mt-tag-group-neg">Слабые стороны</div>' +
+      '<div class="mt-tag-row">' + negChips + "</div>" +
+      "</div>"
+    );
+  }
+
+  function renderDetail(m) {
+    var avg = average(m.criteria);
+
+    var html =
+      '<div class="mt-detail-head">' +
+      '<button class="mt-icon-btn on-dark" id="back-btn" aria-label="Назад">←</button>' +
+      '<div class="mt-detail-title">' + escapeHtml(m.title) + "</div>" +
+      "</div>" +
+      '<div class="mt-detail-status">' +
+      statusBadgeHtml(m.status, 'data-cycle-id="' + m.id + '"') + " " +
+      typeBadgeHtml(m.type || "manhwa", 'data-cycle-type-id="' + m.id + '"') +
+      "</div>" +
+      renderErrorBanner() +
+      '<div class="mt-detail-body">' +
+      renderRatingSection(m, avg);
 
     html += renderGenresPanel(m) + renderAltTitlesPanel(m) + renderCoverPanel(m);
 
@@ -705,6 +826,36 @@
       html += '<div class="mt-paper"><div class="mt-panel-title">ЛЮБИМЫЕ ЖАНРЫ</div>' + genreBars + "</div>";
     }
 
+    var tagCounts = {};
+    state.manhwas.forEach(function (m) {
+      (m.tags || []).forEach(function (t) { tagCounts[t] = (tagCounts[t] || 0) + 1; });
+    });
+    var topPos = POSITIVE_TAGS
+      .filter(function (t) { return tagCounts[t]; })
+      .sort(function (a, b) { return tagCounts[b] - tagCounts[a]; })
+      .slice(0, 5);
+    var topNeg = NEGATIVE_TAGS
+      .filter(function (t) { return tagCounts[t]; })
+      .sort(function (a, b) { return tagCounts[b] - tagCounts[a]; })
+      .slice(0, 5);
+
+    if (topPos.length > 0 || topNeg.length > 0) {
+      var tagRow = function (t) {
+        return '<span class="mt-tag-stat">' + escapeHtml(t) + ' <b>' + tagCounts[t] + "</b></span>";
+      };
+      html +=
+        '<div class="mt-paper"><div class="mt-panel-title">ЧАСТО ОТМЕЧАЕШЬ</div>' +
+        (topPos.length
+          ? '<div class="mt-tag-group-label mt-tag-group-pos">Сильные стороны</div><div class="mt-tag-stat-row">' +
+            topPos.map(tagRow).join("") + "</div>"
+          : "") +
+        (topNeg.length
+          ? '<div class="mt-tag-group-label mt-tag-group-neg" style="margin-top:10px">Слабые стороны</div><div class="mt-tag-stat-row">' +
+            topNeg.map(tagRow).join("") + "</div>"
+          : "") +
+        "</div>";
+    }
+
     var sortedByScore = rated.slice().sort(function (a, b) { return average(b.criteria) - average(a.criteria); });
     var top = sortedByScore.slice(0, 3);
     var bottom = sortedByScore.slice(-3).reverse().filter(function (m) { return top.indexOf(m) === -1; });
@@ -781,13 +932,17 @@
     app.innerHTML = '<div class="mt-shell">' + body + "</div>" + (showTabs ? renderTabbar() : "");
     attachHandlers(selected);
 
+    var viewKey = selected ? "detail:" + selected.id : "tab:" + state.tab;
+    var viewChanged = viewKey !== lastViewKey;
+    lastViewKey = viewKey;
+
     if (focusInfo) {
       var el = document.getElementById("search-input");
       if (el) {
         el.focus();
         try { el.setSelectionRange(focusInfo.start, focusInfo.end); } catch (e) {}
       }
-    } else {
+    } else if (viewChanged) {
       window.scrollTo(0, 0);
     }
   }
@@ -1013,6 +1168,37 @@
       render();
     });
 
+    app.querySelectorAll("[data-emotion-pick]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.getAttribute("data-manhwa-id");
+        var m = findManhwa(id);
+        if (!m) return;
+        m.emotionRating = parseInt(btn.getAttribute("data-emotion-pick"), 10);
+        m.emotionRatedAt = Date.now();
+        save();
+        render();
+      });
+    });
+
+    app.querySelectorAll("[data-toggle-tag]").forEach(function (btn) {
+      if (btn.hasAttribute("disabled")) return;
+      btn.addEventListener("click", function () {
+        var id = btn.getAttribute("data-manhwa-id");
+        var m = findManhwa(id);
+        if (!m) return;
+        var tag = btn.getAttribute("data-toggle-tag");
+        if (!m.tags) m.tags = [];
+        var idx = m.tags.indexOf(tag);
+        if (idx !== -1) {
+          m.tags.splice(idx, 1);
+        } else if (m.tags.length < 3) {
+          m.tags.push(tag);
+        }
+        save();
+        render();
+      });
+    });
+
     app.querySelectorAll("[data-alt-lang]").forEach(function (input) {
       var lang = input.getAttribute("data-alt-lang");
       input.addEventListener("input", function () {
@@ -1124,12 +1310,20 @@
     // export to file
     var exportBtn = document.getElementById("export-btn");
     if (exportBtn) exportBtn.addEventListener("click", function () {
-      var blob = new Blob([JSON.stringify(state.manhwas, null, 2)], { type: "application/json" });
+      var json = JSON.stringify(state.manhwas, null, 2);
+      var date = new Date().toISOString().slice(0, 10);
+      var filename = "manhwa-tracker-backup-" + date + ".json";
+
+      if (window.AndroidBridge && window.AndroidBridge.saveFile) {
+        window.AndroidBridge.saveFile(filename, json);
+        return;
+      }
+
+      var blob = new Blob([json], { type: "application/json" });
       var url = URL.createObjectURL(blob);
       var a = document.createElement("a");
-      var date = new Date().toISOString().slice(0, 10);
       a.href = url;
-      a.download = "manhwa-tracker-backup-" + date + ".json";
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -1190,6 +1384,12 @@
   /* ---------- boot ---------- */
   load();
   render();
+
+  setInterval(function () {
+    if (!state.selectedId) return;
+    var m = findManhwa(state.selectedId);
+    if (m && ratingPhase(m) === "waiting") render();
+  }, 60000);
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function () {
