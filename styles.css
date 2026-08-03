@@ -202,6 +202,7 @@ body {
   border-radius: 20px; padding: 4px 6px 4px 10px; font-size: 11.5px; font-weight: 700;
 }
 .mt-genre-remove { background: none; border: none; color: #A9C0FF; cursor: pointer; font-size: 10px; padding: 2px; }
+.mt-genre-chip-static { padding: 4px 10px; }
 .mt-genre-suggest-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .mt-genre-suggest {
   background: rgba(255,255,255,0.04); border: 1px dashed rgba(255,255,255,0.16); color: var(--text-muted);
@@ -378,9 +379,18 @@ input[type="range"].mt-slider::-moz-range-thumb {
 
 .mt-alt-row { display: flex; align-items: center; gap: 10px; }
 .mt-alt-row + .mt-alt-row { margin-top: 10px; }
+.mt-alt-row-static { display: flex; align-items: baseline; gap: 10px; }
+.mt-alt-row-static + .mt-alt-row-static { margin-top: 8px; }
+.mt-alt-value { font-size: 13.5px; color: var(--text-primary); font-weight: 600; }
 .mt-alt-label {
   font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; color: var(--text-faint);
   width: 26px; flex-shrink: 0;
+}
+
+.mt-hero-cover {
+  width: 100%; height: 200px; border-radius: 14px; background-size: cover; background-position: center;
+  background-color: var(--card-top); border: 1px solid var(--card-border);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.45);
 }
 
 .mt-panel-title {

@@ -552,7 +552,7 @@
     );
   }
 
-  function renderRatingSection(m, avg) {
+  function renderRatingSection(m, avg, editable) {
     var phase = ratingPhase(m);
 
     if (phase === "phase1") {
@@ -590,15 +590,11 @@
     }
 
     // phase === "legacy" or "phase2" — full criteria available
-    var isNew = m.rated === false;
-    var unlocked = !!state.unlockedIds[m.id];
-    var editable = isNew || unlocked;
-
     var html = '<div class="mt-paper mt-radar-panel">' + radarSvg(m.criteria, {}) + stampHtml(avg, 50) + "</div>" +
       '<div class="mt-paper mt-criteria-panel">';
 
     if (editable) {
-      html += '<div class="mt-lock-hint">' + (isNew ? "Выставь оценки — потом можно будет только смотреть" : "Режим редактирования") + "</div>";
+      html += '<div class="mt-lock-hint">Можно менять — не забудь нажать «Готово» внизу</div>';
       m.criteria.forEach(function (c) {
         var color = scoreColor(c.score);
         var removable = m.criteria.length > 1;
@@ -640,14 +636,8 @@
       } else {
         html += '<button class="mt-add-btn" id="start-add-crit">+ Свой критерий</button>';
       }
-      html += '<button class="mt-primary-btn" id="finish-rating-btn" data-manhwa-id="' + m.id +
-        '" style="width:100%">Готово</button>';
-    } else {
-      html += '<button class="mt-ghost-btn" id="unlock-rating-btn" data-manhwa-id="' + m.id +
-        '" style="width:100%">✎ Изменить оценку</button>';
     }
 
-    html += renderTagsPanel(m);
     return html;
   }
 
@@ -687,8 +677,64 @@
     );
   }
 
+  function renderTagsReadOnly(m) {
+    var tags = m.tags || [];
+    if (!tags.length) return "";
+    var chips = tags.map(function (t) {
+      var positive = POSITIVE_TAGS.indexOf(t) !== -1;
+      var color = positive ? "#34D399" : "#FF5C77";
+      return '<span class="mt-tag-chip" style="border-color:' + color + ";color:" + color +
+        ";background:" + color + '18;">' + escapeHtml(t) + "</span>";
+    }).join("");
+    return (
+      '<div class="mt-paper">' +
+      '<div class="mt-panel-title">СИЛЬНЫЕ / СЛАБЫЕ СТОРОНЫ</div>' +
+      '<div class="mt-tag-row">' + chips + "</div>" +
+      "</div>"
+    );
+  }
+
+  function renderGenresReadOnly(m) {
+    var genres = m.genres || [];
+    if (!genres.length) return "";
+    var chips = genres.map(function (g) {
+      return '<span class="mt-genre-chip mt-genre-chip-static">' + escapeHtml(g) + "</span>";
+    }).join("");
+    return (
+      '<div class="mt-paper">' +
+      '<div class="mt-panel-title">ЖАНРЫ</div>' +
+      '<div class="mt-genre-list">' + chips + "</div>" +
+      "</div>"
+    );
+  }
+
+  function renderAltTitlesReadOnly(m) {
+    var alt = m.altTitles || {};
+    var fields = [
+      ["en", "EN"], ["ja", "JP"], ["ru", "RU"]
+    ];
+    var rows = fields
+      .filter(function (f) { return alt[f[0]] && alt[f[0]].trim(); })
+      .map(function (f) {
+        return (
+          '<div class="mt-alt-row-static"><span class="mt-alt-label">' + f[1] + "</span>" +
+          '<span class="mt-alt-value">' + escapeHtml(alt[f[0]]) + "</span></div>"
+        );
+      }).join("");
+    if (!rows) return "";
+    return (
+      '<div class="mt-paper">' +
+      '<div class="mt-panel-title">АЛЬТЕРНАТИВНЫЕ НАЗВАНИЯ</div>' +
+      rows +
+      "</div>"
+    );
+  }
+
   function renderDetail(m) {
     var avg = average(m.criteria);
+    var isNew = m.rated === false;
+    var unlocked = !!state.unlockedIds[m.id];
+    var editable = isNew || unlocked;
 
     var html =
       '<div class="mt-detail-head">' +
@@ -700,10 +746,28 @@
       typeBadgeHtml(m.type || "manhwa", 'data-cycle-type-id="' + m.id + '"') +
       "</div>" +
       renderErrorBanner() +
-      '<div class="mt-detail-body">' +
-      renderRatingSection(m, avg);
+      '<div class="mt-detail-body">';
 
-    html += renderGenresPanel(m) + renderAltTitlesPanel(m) + renderCoverPanel(m);
+    if (m.coverUrl) {
+      html += '<div class="mt-hero-cover" style="background-image:url(\'' +
+        escapeHtml(m.coverUrl).replace(/'/g, "%27") + "')\"></div>";
+    }
+
+    html += renderRatingSection(m, avg, editable);
+
+    if (editable) {
+      html += renderTagsPanel(m) + renderGenresPanel(m) + renderAltTitlesPanel(m) + renderCoverPanel(m);
+    } else {
+      html += renderTagsReadOnly(m) + renderGenresReadOnly(m) + renderAltTitlesReadOnly(m);
+    }
+
+    if (editable) {
+      html += '<button class="mt-primary-btn" id="finish-rating-btn" data-manhwa-id="' + m.id +
+        '" style="width:100%">Готово</button>';
+    } else {
+      html += '<button class="mt-ghost-btn" id="unlock-rating-btn" data-manhwa-id="' + m.id +
+        '" style="width:100%">✎ Изменить</button>';
+    }
 
     var confirmingDelete = state.confirmDeleteId === m.id;
     html += '<button class="mt-clear-btn' + (confirmingDelete ? " confirm" : "") +
