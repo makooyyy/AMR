@@ -45,6 +45,128 @@
     "Переизбыток клише", "Слабый финал", "Проблемы с переводом", "Слишком много филлера"
   ];
 
+  // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
+  var CHANGELOG = [
+    {
+      version: "14",
+      type: "update",
+      title: "Единая блокировка карточки",
+      items: [
+        "Теги, жанры, альт-названия и обложка теперь заполняются один раз и блокируются вместе с оценкой",
+        "Кнопка «Изменить» перенесена в самый низ страницы манхвы",
+        "Обложка теперь показывается баннером в самом верху карточки"
+      ]
+    },
+    {
+      version: "13",
+      type: "feature",
+      title: "Двухфазная оценка и теги",
+      items: [
+        "Быстрая эмоциональная оценка (1–5 звёзд) сразу после прочтения",
+        "Полная шкала критериев открывается только через 12 часов — против импульсивных оценок",
+        "Теги «Сильные / слабые стороны» — до 3 штук на тайтл",
+        "В профиле — блок «Часто отмечаешь» по тегам"
+      ]
+    },
+    {
+      version: "12",
+      type: "fix",
+      title: "Прокрутка страницы",
+      items: [
+        "Страница больше не дёргается наверх при каждом действии — только при смене экрана"
+      ]
+    },
+    {
+      version: "11",
+      type: "fix",
+      title: "Равные карточки в сетке",
+      items: [
+        "Исправлена разная ширина/высота карточек из-за длинных слов в названиях"
+      ]
+    },
+    {
+      version: "10",
+      type: "update",
+      title: "Упрощение главного меню",
+      items: [
+        "Удаление манхвы теперь возможно только внутри её карточки",
+        "Фильтр по жанрам спрятан за отдельной кнопкой",
+        "Из фильтра статусов убрана лишняя кнопка «Все» — повторный тап по активному статусу сбрасывает фильтр"
+      ]
+    },
+    {
+      version: "9",
+      type: "fix",
+      title: "Плашка статуса",
+      items: ["Статус-бейдж на обложке больше не наезжает на кнопку удаления"]
+    },
+    {
+      version: "8",
+      type: "fix",
+      title: "Выравнивание карточек",
+      items: ["Названия теперь всегда занимают место под 2 строки — карточки в ряду не съезжают"]
+    },
+    {
+      version: "7",
+      type: "update",
+      title: "Порядок блоков карточки",
+      items: ["Оценки теперь показываются сверху, жанры/названия/обложка — снизу"]
+    },
+    {
+      version: "6",
+      type: "feature",
+      title: "Обложки и жанры",
+      items: [
+        "Обложка по ссылке (URL)",
+        "Жанры с готовыми подсказками и своими вариантами",
+        "Сетка карточек-постеров вместо списка",
+        "Фильтр и поиск по жанрам"
+      ]
+    },
+    {
+      version: "5",
+      type: "feature",
+      title: "Защита данных и метаданные",
+      items: [
+        "Удаление манхвы теперь с подтверждением (два тапа)",
+        "Альтернативные названия — английское / японское / русское",
+        "Оценка ставится один раз, потом только просмотр, изменить — по кнопке"
+      ]
+    },
+    {
+      version: "4",
+      type: "feature",
+      title: "Типы и поиск",
+      items: [
+        "Тип тайтла: манхва / манга / маньхуа",
+        "Поиск по названию",
+        "Фильтр по статусу"
+      ]
+    },
+    {
+      version: "3",
+      type: "feature",
+      title: "Профиль",
+      items: [
+        "Вкладка «Профиль» со статистикой",
+        "Разбивка по статусам, средняя оценка, топ и аутсайдеры",
+        "Резервное копирование — сохранить/загрузить из файла"
+      ]
+    },
+    {
+      version: "2",
+      type: "update",
+      title: "Тёмная тема",
+      items: ["Полный редизайн: тёмный фон, радар-диаграмма критериев вместо просто списка чисел"]
+    },
+    {
+      version: "1",
+      type: "feature",
+      title: "Первая версия",
+      items: ["Оценка манхвы по критериям: рисовка, сюжет, персонажи, динамика, атмосфера"]
+    }
+  ];
+
   var lastViewKey = null;
 
   var state = {
@@ -55,6 +177,7 @@
     filterStatus: "all",
     filterGenre: "all",
     showGenreFilter: false,
+    showChangelog: false,
     searchQuery: "",
     addingManhwa: false,
     pendingType: "manhwa",
@@ -341,6 +464,40 @@
     return arr;
   }
 
+  function changelogTypeMeta(type) {
+    if (type === "feature") return { label: "НОВОЕ", color: "#34D399" };
+    if (type === "fix") return { label: "ИСПРАВЛЕНИЕ", color: "#FF5C77" };
+    return { label: "ОБНОВЛЕНИЕ", color: "#6C93FF" };
+  }
+
+  function renderChangelog() {
+    var entries = CHANGELOG.map(function (entry) {
+      var meta = changelogTypeMeta(entry.type);
+      var items = entry.items.map(function (it) {
+        return '<li>' + escapeHtml(it) + "</li>";
+      }).join("");
+      return (
+        '<div class="mt-paper mt-changelog-entry">' +
+        '<div class="mt-changelog-entry-head">' +
+        '<span class="mt-changelog-badge" style="background:' + meta.color + '18;color:' + meta.color +
+        ";border-color:" + meta.color + '">' + meta.label + "</span>" +
+        '<span class="mt-changelog-version">v' + escapeHtml(entry.version) + "</span>" +
+        "</div>" +
+        '<div class="mt-changelog-title">' + escapeHtml(entry.title) + "</div>" +
+        '<ul class="mt-changelog-list">' + items + "</ul>" +
+        "</div>"
+      );
+    }).join("");
+
+    return (
+      '<div class="mt-detail-head">' +
+      '<button class="mt-icon-btn on-dark" id="changelog-back-btn" aria-label="Назад">←</button>' +
+      '<div class="mt-detail-title">ЖУРНАЛ ОБНОВЛЕНИЙ</div>' +
+      "</div>" +
+      '<div class="mt-list">' + entries + "</div>"
+    );
+  }
+
   function renderHeader() {
     var sorts = [["recent", "новые"], ["rating", "оценка"], ["title", "А-Я"]];
     var btns = sorts.map(function (s) {
@@ -384,7 +541,10 @@
 
     return (
       '<div class="mt-header">' +
+      '<div class="mt-title-row">' +
       '<div class="mt-title">МАНХВА<span class="accent">•</span>ТРЕКЕР</div>' +
+      '<button class="mt-changelog-btn" id="open-changelog">🕘 Обновления</button>' +
+      "</div>" +
       '<div class="mt-subrow">' +
       '<div class="mt-subtitle">Рисовка, сюжет, персонажи — раздельно</div>' +
       '<div class="mt-sort-group">' + btns + "</div>" +
@@ -984,7 +1144,9 @@
     }
 
     var body;
-    if (selected) {
+    if (state.showChangelog) {
+      body = renderChangelog();
+    } else if (selected) {
       body = renderDetail(selected);
     } else if (state.tab === "library") {
       body = renderLibrary();
@@ -992,11 +1154,11 @@
       body = renderProfile();
     }
 
-    var showTabs = !selected;
+    var showTabs = !selected && !state.showChangelog;
     app.innerHTML = '<div class="mt-shell">' + body + "</div>" + (showTabs ? renderTabbar() : "");
     attachHandlers(selected);
 
-    var viewKey = selected ? "detail:" + selected.id : "tab:" + state.tab;
+    var viewKey = state.showChangelog ? "changelog" : (selected ? "detail:" + selected.id : "tab:" + state.tab);
     var viewChanged = viewKey !== lastViewKey;
     lastViewKey = viewKey;
 
@@ -1190,6 +1352,18 @@
       state.selectedId = null;
       state.addingCriterion = false;
       state.pendingGenreDraft = "";
+      render();
+    });
+
+    var openChangelogBtn = document.getElementById("open-changelog");
+    if (openChangelogBtn) openChangelogBtn.addEventListener("click", function () {
+      state.showChangelog = true;
+      render();
+    });
+
+    var changelogBackBtn = document.getElementById("changelog-back-btn");
+    if (changelogBackBtn) changelogBackBtn.addEventListener("click", function () {
+      state.showChangelog = false;
       render();
     });
 
