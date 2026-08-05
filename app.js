@@ -6,10 +6,10 @@
   var DEFAULT_CRITERIA = ["Рисовка", "Сюжет", "Персонажи", "Динамика", "Атмосфера"];
 
   var STATUSES = [
-    { id: "reading", label: "Читаю", color: "#6C93FF" },
+    { id: "reading", label: "Читаю", color: "#22D3EE" },
     { id: "done", label: "Завершено", color: "#34D399" },
-    { id: "dropped", label: "Дропнул", color: "#8880A0" },
-    { id: "plan", label: "В планах", color: "#F3A93C" }
+    { id: "dropped", label: "Дропнул", color: "#FF5C77" },
+    { id: "plan", label: "В планах", color: "#FFB238" }
   ];
 
   var TYPES = [
@@ -167,6 +167,28 @@
     }
   ];
 
+  var ICON_BELL =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>' +
+    '<path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
+
+  var ICON_SEARCH =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/>' +
+    '<line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
+
+  var ICON_BOOK =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>' +
+    '<path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>';
+
+  var ICON_USER =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>' +
+    '<circle cx="12" cy="7" r="4"/></svg>';
+
+  var CHANGELOG_SEEN_KEY = "manhwa-tracker:changelog-seen:v1";
+
   var lastViewKey = null;
 
   var state = {
@@ -178,6 +200,8 @@
     filterGenre: "all",
     showGenreFilter: false,
     showChangelog: false,
+    showSearch: false,
+    changelogSeenVersion: null,
     searchQuery: "",
     addingManhwa: false,
     pendingType: "manhwa",
@@ -285,6 +309,11 @@
     } catch (e) {
       state.manhwas = [];
     }
+    try {
+      state.changelogSeenVersion = window.localStorage.getItem(CHANGELOG_SEEN_KEY);
+    } catch (e) {
+      state.changelogSeenVersion = null;
+    }
   }
 
   function save() {
@@ -313,8 +342,8 @@
   function radarSvg(criteria, opts) {
     opts = opts || {};
     var size = opts.size || 220;
-    var fill = opts.fillColor || "#FF5C77";
-    var dot = opts.dotColor || "#F3A93C";
+    var fill = opts.fillColor || "#FFB238";
+    var dot = opts.dotColor || "#FFB238";
     var n = criteria.length;
 
     if (n < 3) {
@@ -513,7 +542,7 @@
       return (
         '<button class="mt-filter-chip' + (active ? " active" : "") + '" data-filter="' + f.id +
         '" style="' + (active ?
-          "background:" + f.color + ";color:#120F1A;border-color:" + f.color :
+          "background:" + f.color + ";color:#0D0A14;border-color:" + f.color :
           "border-color:" + f.color + "45;color:" + f.color) + '">' + f.label + "</button>"
       );
     }).join("");
@@ -524,7 +553,7 @@
       : "";
 
     var genreList = allGenresSorted();
-    var genreToggleLabel = "🔍 Жанры" + (state.filterGenre !== "all" ? ": " + state.filterGenre : "");
+    var genreToggleLabel = "Жанры" + (state.filterGenre !== "all" ? ": " + state.filterGenre : "");
     var genrePanel = "";
     if (genreList.length > 0 && state.showGenreFilter) {
       var genreChips = [{ id: "all", label: "Все жанры" }]
@@ -539,20 +568,29 @@
       genrePanel = '<div class="mt-genre-filter-row">' + genreChips + "</div>";
     }
 
+    var hasUnseen = CHANGELOG.length > 0 && CHANGELOG[0].version !== state.changelogSeenVersion;
+    var searchPanel = state.showSearch
+      ? '<div class="mt-search-wrap">' +
+        '<input class="mt-input mt-search-input" id="search-input" placeholder="Поиск по названию или жанру…" value="' +
+        escapeHtml(query) + '" />' + clearBtn +
+        "</div>"
+      : "";
+
     return (
       '<div class="mt-header">' +
       '<div class="mt-title-row">' +
       '<div class="mt-title">МАНХВА<span class="accent">•</span>ТРЕКЕР</div>' +
-      '<button class="mt-changelog-btn" id="open-changelog">🕘 Обновления</button>' +
+      '<button class="mt-icon-round" id="open-changelog" aria-label="Журнал обновлений">' + ICON_BELL +
+      (hasUnseen ? '<span class="mt-notify-dot"></span>' : "") + "</button>" +
       "</div>" +
       '<div class="mt-subrow">' +
       '<div class="mt-subtitle">Рисовка, сюжет, персонажи — раздельно</div>' +
+      '<div class="mt-subrow-actions">' +
       '<div class="mt-sort-group">' + btns + "</div>" +
-      "</div>" +
-      '<div class="mt-search-wrap">' +
-      '<input class="mt-input mt-search-input" id="search-input" placeholder="Поиск по названию или жанру…" value="' +
-      escapeHtml(query) + '" />' + clearBtn +
-      "</div>" +
+      '<button class="mt-icon-round mt-icon-round-sm' + (state.showSearch ? " active" : "") +
+      '" id="toggle-search" aria-label="Поиск">' + ICON_SEARCH + "</button>" +
+      "</div></div>" +
+      searchPanel +
       '<div class="mt-filter-row">' + filterBtns +
       (genreList.length > 0
         ? '<button class="mt-genre-toggle-chip' + (state.showGenreFilter ? " active" : "") +
@@ -586,9 +624,8 @@
 
     if (list.length > 0) {
       html += '<div class="mt-grid">';
-      list.forEach(function (m) {
+      list.forEach(function (m, gridIdx) {
         var avg = average(m.criteria);
-        var accent = scoreColor(avg);
         var st = statusById(m.status);
         var ty = typeById(m.type || "manhwa");
         var coverStyle = m.coverUrl
@@ -596,16 +633,15 @@
           : "";
 
         html +=
-          '<div class="mt-grid-card">' +
+          '<div class="mt-grid-card" style="animation-delay:' + Math.min(gridIdx * 30, 240) + 'ms">' +
           '<div class="mt-cover' + (m.coverUrl ? "" : " mt-cover-empty") + '" style="' + coverStyle +
           '" data-open-id="' + m.id + '">' +
           (m.coverUrl ? "" : '<span class="mt-cover-fallback">' + escapeHtml((m.title[0] || "?").toUpperCase()) + "</span>") +
           '<span class="mt-cover-status" style="background:' + st.color + '">' + st.label + "</span>" +
-          '<span class="mt-cover-type">' + ty.label + "</span>" +
-          '<span class="mt-cover-stamp" style="border-color:' + accent + ";color:" + accent + '">' +
-          (avg === null ? "–" : avg.toFixed(1)) + "</span>" +
+          '<span class="mt-cover-score">' + (avg === null ? "–" : avg.toFixed(1)) + "</span>" +
           "</div>" +
           '<div class="mt-cover-title" data-open-id="' + m.id + '">' + escapeHtml(m.title) + "</div>" +
+          '<div class="mt-cover-type-line">' + ty.label + "</div>" +
           "</div>";
       });
       html += "</div>";
@@ -963,7 +999,7 @@
     return (
       '<div class="mt-mini-row" data-open-id="' + m.id + '">' +
       '<div class="mt-mini-title">' + escapeHtml(m.title) + "</div>" +
-      '<span class="mt-mini-score" style="color:' + scoreColor(avg) + '">' +
+      '<span class="mt-mini-score" style="color:#FFB238">' +
       (avg === null ? "—" : avg.toFixed(1)) + "</span></div>"
     );
   }
@@ -976,13 +1012,14 @@
 
     var html =
       '<div class="mt-profile-head">' +
-      '<div class="mt-profile-title">ПРОФИЛЬ<span style="color:#FF5C77">.</span></div>' +
-      '<div class="mt-profile-sub">Статистика по всей библиотеке</div>' +
+      '<div class="mt-profile-avatar">' + ICON_USER + "</div>" +
+      '<div><div class="mt-profile-title">ПРОФИЛЬ<span style="color:#FF3D9A">.</span></div>' +
+      '<div class="mt-profile-sub">Статистика по всей библиотеке</div></div>' +
       "</div>" + renderErrorBanner() +
       '<div class="mt-list">' +
       '<div class="mt-chip-row">' +
       '<div class="mt-chip"><div class="mt-chip-value">' + state.manhwas.length + '</div><div class="mt-chip-label">манхв в списке</div></div>' +
-      '<div class="mt-chip"><div class="mt-chip-value" style="color:' + scoreColor(overallAvg) + '">' +
+      '<div class="mt-chip"><div class="mt-chip-value" style="color:#FFB238">' +
       (overallAvg === null ? "—" : overallAvg.toFixed(1)) + '</div><div class="mt-chip-label">средняя оценка</div></div>' +
       "</div>";
 
@@ -1009,7 +1046,7 @@
         '<div class="mt-paper mt-radar-panel" style="align-items:flex-start">' +
         '<div class="mt-panel-title">СРЕДНЕЕ ПО КРИТЕРИЯМ</div>' +
         '<div style="width:100%;display:flex;justify-content:center">' +
-        radarSvg(agg, { fillColor: "#6C93FF", dotColor: "#F3A93C" }) + "</div></div>";
+        radarSvg(agg, { fillColor: "#FFB238", dotColor: "#FFB238" }) + "</div></div>";
     }
 
     if (agg.length > 0) {
@@ -1017,8 +1054,8 @@
         return (
           '<div class="mt-bar-row"><span class="mt-bar-name">' + escapeHtml(c.name) + "</span>" +
           '<div class="mt-bar-track"><div class="mt-bar-fill" style="width:' + (c.score / 10) * 100 +
-          "%;background:" + scoreColor(c.score) + ';"></div></div>' +
-          '<span class="mt-bar-value" style="color:' + scoreColor(c.score) + '">' + c.score.toFixed(1) + "</span></div>"
+          '%;background:#FFB238;"></div></div>' +
+          '<span class="mt-bar-value" style="color:#FFB238">' + c.score.toFixed(1) + "</span></div>"
         );
       }).join("");
       html += '<div class="mt-paper"><div class="mt-panel-title">ЧТО ТЫ ЦЕНИШЬ ВЫШЕ ВСЕГО</div>' + bars + "</div>";
@@ -1123,10 +1160,18 @@
 
   /* ---------- tabbar ---------- */
   function renderTabbar() {
-    var tabs = [["library", "Библиотека"], ["profile", "Профиль"]];
+    var tabs = [
+      ["library", "Библиотека", ICON_BOOK],
+      ["profile", "Профиль", ICON_USER]
+    ];
     var inner = tabs.map(function (t) {
       var active = state.tab === t[0];
-      return '<button class="mt-tab' + (active ? " active" : "") + '" data-tab="' + t[0] + '">' + t[1] + "</button>";
+      return (
+        '<button class="mt-tab-v2' + (active ? " active" : "") + '" data-tab="' + t[0] + '">' +
+        '<span class="mt-tab-icon-wrap">' + t[2] + "</span>" +
+        '<span class="mt-tab-label">' + t[1] + "</span>" +
+        "</button>"
+      );
     }).join("");
     return '<div class="mt-tabbar"><div class="mt-tabbar-inner">' + inner + "</div></div>";
   }
@@ -1232,6 +1277,17 @@
         if (el) el.focus();
       });
     }
+
+    var toggleSearchBtn = document.getElementById("toggle-search");
+    if (toggleSearchBtn) toggleSearchBtn.addEventListener("click", function () {
+      state.showSearch = !state.showSearch;
+      if (!state.showSearch) state.searchQuery = "";
+      render();
+      if (state.showSearch) {
+        var el = document.getElementById("search-input");
+        if (el) el.focus();
+      }
+    });
 
     // open manhwa
     app.querySelectorAll("[data-open-id]").forEach(function (el) {
@@ -1358,6 +1414,10 @@
     var openChangelogBtn = document.getElementById("open-changelog");
     if (openChangelogBtn) openChangelogBtn.addEventListener("click", function () {
       state.showChangelog = true;
+      if (CHANGELOG.length > 0) {
+        state.changelogSeenVersion = CHANGELOG[0].version;
+        try { window.localStorage.setItem(CHANGELOG_SEEN_KEY, CHANGELOG[0].version); } catch (e) {}
+      }
       render();
     });
 
