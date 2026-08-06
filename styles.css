@@ -414,6 +414,23 @@ input[type="range"].mt-slider::-moz-range-thumb {
 }
 .mt-award-score { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 13px; color: var(--amber); flex-shrink: 0; }
 .mt-ceremony-panel .mt-award-row { cursor: pointer; }
+.mt-ceremony-hint { color: var(--text-muted); font-size: 12px; line-height: 1.4; margin-bottom: 10px; }
+
+.mt-nominee-row {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px;
+  border: 1.5px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02);
+  cursor: pointer; transition: transform .12s cubic-bezier(.34,1.56,.64,1), border-color .15s ease, background .15s ease;
+}
+.mt-nominee-row:active { transform: scale(0.98); }
+.mt-nominee-row + .mt-nominee-row { margin-top: 8px; }
+.mt-nominee-row.picked { border-color: var(--amber); background: rgba(255,178,56,0.1); }
+.mt-nominee-trophy { width: 20px; text-align: center; font-size: 15px; flex-shrink: 0; }
+.mt-nominee-info { flex: 1; min-width: 0; }
+.mt-nominee-title {
+  font-weight: 700; font-size: 13.5px; color: var(--text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mt-nominee-score { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 13px; flex-shrink: 0; }
 
 .mt-hero-cover {
   width: 100%; height: 200px; border-radius: 16px; background-size: cover; background-position: center;
