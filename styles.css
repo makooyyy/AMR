@@ -508,6 +508,7 @@ input[type="range"].mt-slider::-moz-range-thumb {
   transition: background .18s ease, color .18s ease, transform .2s cubic-bezier(.34,1.56,.64,1);
 }
 .mt-tab-icon-wrap svg { width: 19px; height: 19px; }
+.mt-tab-emoji { font-size: 16px; line-height: 1; }
 .mt-tab-v2.active .mt-tab-icon-wrap {
   background: var(--pink); color: #fff; transform: scale(1.08);
   box-shadow: 0 4px 14px rgba(255,61,154,0.45);

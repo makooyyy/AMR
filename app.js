@@ -62,6 +62,15 @@
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
     {
+      version: "20",
+      type: "update",
+      title: "Отдельная вкладка «Премия»",
+      items: [
+        "Выбор победителей месяца вынесен из профиля в отдельную вкладку между Библиотекой и Профилем",
+        "Открывается сразу — без лишнего перехода"
+      ]
+    },
+    {
       version: "19",
       type: "update",
       title: "Ручной выбор победителей",
@@ -266,7 +275,6 @@
     showSearch: false,
     changelogSeenVersion: null,
     awardWinners: {},
-    ceremonyMonth: null,
     searchQuery: "",
     addingManhwa: false,
     pendingType: "manhwa",
@@ -649,11 +657,14 @@
     return { label: "ОБНОВЛЕНИЕ", color: "#6C93FF" };
   }
 
-  function renderCeremony(monthKey) {
+  function renderAwardsTab() {
+    var monthKey = lastCompletedMonthKey();
     var html =
-      '<div class="mt-detail-head">' +
-      '<button class="mt-icon-btn on-dark" id="ceremony-back-btn" aria-label="Назад">←</button>' +
-      '<div class="mt-detail-title">🏆 ' + escapeHtml(monthLabel(monthKey)) + "</div>" +
+      '<div class="mt-header">' +
+      '<div class="mt-title-row">' +
+      '<div class="mt-title">🏆 ПРЕМИЯ</div>' +
+      "</div>" +
+      '<div class="mt-subrow"><div class="mt-subtitle">Итоги месяца — ' + escapeHtml(monthLabel(monthKey)) + "</div></div>" +
       "</div>" +
       '<div class="mt-list">';
 
@@ -687,7 +698,9 @@
     });
 
     if (!any) {
-      html += '<div class="mt-paper mt-empty"><div class="mt-empty-text">Нет оценённых тайтлов за этот месяц.</div></div>';
+      html +=
+        '<div class="mt-paper mt-empty"><div class="mt-empty-title">Пока нечего вручать</div>' +
+        '<div class="mt-empty-text">Награды появятся, когда закончится месяц с хотя бы одним оценённым тайтлом.</div></div>';
     }
 
     html += "</div>";
@@ -1229,46 +1242,6 @@
       (overallAvg === null ? "—" : overallAvg.toFixed(1)) + '</div><div class="mt-chip-label">средняя оценка</div></div>' +
       "</div>";
 
-    var ceremonyMonth = lastCompletedMonthKey();
-    if (monthHasCandidates(ceremonyMonth)) {
-      var decidedCount = AWARD_CATEGORY_KEYS.filter(function (ck) {
-        return getCandidates(ceremonyMonth, ck, 1).length > 0 && getWinner(ceremonyMonth, ck);
-      }).length;
-      var totalCount = AWARD_CATEGORY_KEYS.filter(function (ck) {
-        return getCandidates(ceremonyMonth, ck, 1).length > 0;
-      }).length;
-      var allDecided = decidedCount === totalCount && totalCount > 0;
-
-      html +=
-        '<div class="mt-paper mt-ceremony-panel">' +
-        '<div class="mt-panel-title">🏆 Церемония — ' + escapeHtml(monthLabel(ceremonyMonth)) + "</div>";
-
-      if (allDecided) {
-        html += AWARD_CATEGORY_KEYS.map(function (ck) {
-          var w = getWinner(ceremonyMonth, ck);
-          if (!w) return "";
-          return (
-            '<div class="mt-award-row" data-open-id="' + w.id + '">' +
-            '<span class="mt-award-trophy">🏆</span>' +
-            '<div class="mt-award-info"><div class="mt-award-title">' +
-            escapeHtml(AWARD_LABELS[ck] || ck) + "</div>" +
-            '<div class="mt-award-sub">' + escapeHtml(w.title) + "</div></div>" +
-            "</div>"
-          );
-        }).join("");
-        html += '<button class="mt-ghost-btn" id="open-ceremony" data-month="' + ceremonyMonth +
-          '" style="width:100%;margin-top:12px">Изменить выбор</button>';
-      } else {
-        html +=
-          '<div class="mt-ceremony-hint">Выбрано ' + decidedCount + " из " + totalCount +
-          " номинаций — реши, кто победил среди лучших кандидатов месяца.</div>" +
-          '<button class="mt-primary-btn" id="open-ceremony" data-month="' + ceremonyMonth +
-          '" style="width:100%;margin-top:10px">🏆 Выбрать победителей</button>';
-      }
-
-      html += "</div>";
-    }
-
     // status bar
     var total = state.manhwas.length || 1;
     var track = "";
@@ -1408,6 +1381,7 @@
   function renderTabbar() {
     var tabs = [
       ["library", "Библиотека", ICON_BOOK],
+      ["awards", "Премия", '<span class="mt-tab-emoji">🏆</span>'],
       ["profile", "Профиль", ICON_USER]
     ];
     var inner = tabs.map(function (t) {
@@ -1437,23 +1411,22 @@
     var body;
     if (state.showChangelog) {
       body = renderChangelog();
-    } else if (state.ceremonyMonth) {
-      body = renderCeremony(state.ceremonyMonth);
     } else if (selected) {
       body = renderDetail(selected);
     } else if (state.tab === "library") {
       body = renderLibrary();
+    } else if (state.tab === "awards") {
+      body = renderAwardsTab();
     } else {
       body = renderProfile();
     }
 
-    var showTabs = !selected && !state.showChangelog && !state.ceremonyMonth;
+    var showTabs = !selected && !state.showChangelog;
     app.innerHTML = '<div class="mt-shell">' + body + "</div>" + (showTabs ? renderTabbar() : "");
     attachHandlers(selected);
 
     var viewKey = state.showChangelog ? "changelog" :
-      (state.ceremonyMonth ? "ceremony:" + state.ceremonyMonth :
-      (selected ? "detail:" + selected.id : "tab:" + state.tab));
+      (selected ? "detail:" + selected.id : "tab:" + state.tab);
     var viewChanged = viewKey !== lastViewKey;
     lastViewKey = viewKey;
 
@@ -1674,18 +1647,6 @@
     var changelogBackBtn = document.getElementById("changelog-back-btn");
     if (changelogBackBtn) changelogBackBtn.addEventListener("click", function () {
       state.showChangelog = false;
-      render();
-    });
-
-    var openCeremonyBtn = document.getElementById("open-ceremony");
-    if (openCeremonyBtn) openCeremonyBtn.addEventListener("click", function () {
-      state.ceremonyMonth = openCeremonyBtn.getAttribute("data-month");
-      render();
-    });
-
-    var ceremonyBackBtn = document.getElementById("ceremony-back-btn");
-    if (ceremonyBackBtn) ceremonyBackBtn.addEventListener("click", function () {
-      state.ceremonyMonth = null;
       render();
     });
 
