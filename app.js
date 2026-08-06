@@ -44,8 +44,33 @@
     "Переизбыток клише", "Слабый финал", "Проблемы с переводом", "Слишком много филлера"
   ];
 
+  var AWARD_LABELS = {
+    overall: "Тайтл месяца",
+    "Рисовка": "Лучшая рисовка",
+    "Сюжет": "Лучший сюжет",
+    "Персонажи": "Лучшие персонажи",
+    "Динамика": "Лучшая динамика",
+    "Атмосфера": "Лучшая атмосфера"
+  };
+
+  var MONTH_NAMES_GENITIVE = [
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря"
+  ];
+
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
+    {
+      version: "18",
+      type: "feature",
+      title: "Ежемесячные награды",
+      items: [
+        "1 числа подводятся итоги прошлого месяца: «Тайтл месяца» и лучшие по каждому критерию среди добавленных в этом месяце",
+        "Награды победителей показываются прямо на карточке манхвы",
+        "В профиле — сводка «Церемония» с итогами последнего завершённого месяца",
+        "Дата добавления теперь сохраняется у каждого тайтла (у старых тайтлов восстановлена автоматически)"
+      ]
+    },
     {
       version: "17",
       type: "fix",
@@ -276,6 +301,76 @@
     return "phase2";
   }
 
+  // Legacy manhwa (added before createdAt existed) get their date backfilled from
+  // the timestamp encoded in the tail of uid(): random36(8 chars) + Date.now().toString(36)
+  function getCreatedAt(m) {
+    if (typeof m.createdAt === "number") return m.createdAt;
+    if (m.id && m.id.length > 8) {
+      var ts = parseInt(m.id.slice(8), 36);
+      if (!isNaN(ts) && ts > 1577836800000 && ts < Date.now() + 86400000) return ts;
+    }
+    return null;
+  }
+
+  function monthKeyOf(ts) {
+    var d = new Date(ts);
+    return d.getFullYear() + "-" + (d.getMonth() + 1 < 10 ? "0" : "") + (d.getMonth() + 1);
+  }
+
+  function monthLabel(monthKey) {
+    var parts = monthKey.split("-");
+    var idx = parseInt(parts[1], 10) - 1;
+    return MONTH_NAMES_GENITIVE[idx] + " " + parts[0];
+  }
+
+  function computeMonthAwards(monthKey) {
+    var eligible = state.manhwas.filter(function (m) {
+      if (!m.rated) return false;
+      var ts = getCreatedAt(m);
+      return ts !== null && monthKeyOf(ts) === monthKey;
+    });
+    if (!eligible.length) return null;
+
+    var awards = [];
+    var bestOverall = null;
+    eligible.forEach(function (m) {
+      var avg = average(m.criteria);
+      if (avg !== null && (bestOverall === null || avg > bestOverall.score)) {
+        bestOverall = { categoryKey: "overall", manhwa: m, score: avg };
+      }
+    });
+    if (bestOverall) awards.push(bestOverall);
+
+    DEFAULT_CRITERIA.forEach(function (critName) {
+      var best = null;
+      eligible.forEach(function (m) {
+        var c = m.criteria.find(function (cc) { return cc.name === critName; });
+        if (c && (best === null || c.score > best.score)) {
+          best = { categoryKey: critName, manhwa: m, score: c.score };
+        }
+      });
+      if (best) awards.push(best);
+    });
+
+    return { monthKey: monthKey, awards: awards };
+  }
+
+  function lastCompletedMonthKey() {
+    var now = new Date();
+    var d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    return monthKeyOf(d.getTime());
+  }
+
+  function awardsForManhwa(m) {
+    var ts = getCreatedAt(m);
+    if (ts === null) return [];
+    var mk = monthKeyOf(ts);
+    if (mk >= monthKeyOf(Date.now())) return [];
+    var result = computeMonthAwards(mk);
+    if (!result) return [];
+    return result.awards.filter(function (a) { return a.manhwa.id === m.id; });
+  }
+
   function statusById(id) {
     for (var i = 0; i < STATUSES.length; i++) if (STATUSES[i].id === id) return STATUSES[i];
     return STATUSES[0];
@@ -300,6 +395,7 @@
       status: "reading",
       type: type || "manhwa",
       rated: false,
+      createdAt: Date.now(),
       emotionRating: null,
       emotionRatedAt: null,
       tags: [],
@@ -654,6 +750,7 @@
           '" data-open-id="' + m.id + '">' +
           (m.coverUrl ? "" : '<span class="mt-cover-fallback">' + escapeHtml((m.title[0] || "?").toUpperCase()) + "</span>") +
           '<span class="mt-cover-status" style="background:' + st.color + '">' + st.label + "</span>" +
+          (awardsForManhwa(m).length > 0 ? '<span class="mt-cover-trophy">🏆</span>' : "") +
           '<span class="mt-cover-score" style="border-color:' + scoreColor(avg) + ";color:" + scoreColor(avg) +
           '">' + (avg === null ? "–" : avg.toFixed(1)) + "</span>" +
           "</div>" +
@@ -959,6 +1056,22 @@
         escapeHtml(m.coverUrl).replace(/'/g, "%27") + "')\"></div>";
     }
 
+    var wins = awardsForManhwa(m);
+    if (wins.length > 0) {
+      html +=
+        '<div class="mt-paper mt-award-panel">' +
+        wins.map(function (a) {
+          return (
+            '<div class="mt-award-row">' +
+            '<span class="mt-award-trophy">🏆</span>' +
+            '<div><div class="mt-award-title">' + escapeHtml(AWARD_LABELS[a.categoryKey] || a.categoryKey) + "</div>" +
+            '<div class="mt-award-sub">' + escapeHtml(monthLabel(monthKeyOf(getCreatedAt(m)))) + "</div></div>" +
+            "</div>"
+          );
+        }).join("") +
+        "</div>";
+    }
+
     html += renderRatingSection(m, avg, editable);
 
     if (editable) {
@@ -1032,6 +1145,26 @@
       '<div class="mt-chip"><div class="mt-chip-value" style="color:#FFB238">' +
       (overallAvg === null ? "—" : overallAvg.toFixed(1)) + '</div><div class="mt-chip-label">средняя оценка</div></div>' +
       "</div>";
+
+    var ceremonyMonth = lastCompletedMonthKey();
+    var ceremony = computeMonthAwards(ceremonyMonth);
+    if (ceremony) {
+      html +=
+        '<div class="mt-paper mt-ceremony-panel">' +
+        '<div class="mt-panel-title">🏆 Церемония — ' + escapeHtml(monthLabel(ceremonyMonth)) + "</div>" +
+        ceremony.awards.map(function (a) {
+          return (
+            '<div class="mt-award-row" data-open-id="' + a.manhwa.id + '">' +
+            '<span class="mt-award-trophy">🏆</span>' +
+            '<div class="mt-award-info"><div class="mt-award-title">' +
+            escapeHtml(AWARD_LABELS[a.categoryKey] || a.categoryKey) + "</div>" +
+            '<div class="mt-award-sub">' + escapeHtml(a.manhwa.title) + "</div></div>" +
+            '<span class="mt-award-score">' + a.score.toFixed(1) + "</span>" +
+            "</div>"
+          );
+        }).join("") +
+        "</div>";
+    }
 
     // status bar
     var total = state.manhwas.length || 1;
