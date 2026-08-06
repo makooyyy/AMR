@@ -24,7 +24,6 @@
     "Психология", "Спорт", "Меха", "Гарем", "Трагедия"
   ];
 
-  var TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 
   var EMOTION_LABELS = [
     "Пожалел о каждой потраченной минуте",
@@ -47,6 +46,34 @@
 
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
+    {
+      version: "17",
+      type: "fix",
+      title: "Карточки и упрощение оценки",
+      items: [
+        "Оценка на карточках снова цветная по значению (красный/жёлтый/зелёный), а не всегда жёлтая",
+        "Убрано обрезание бейджа с оценкой на обложке",
+        "Первое впечатление (звёзды) больше не блокирует оценку на 12 часов — сразу открывает полную шкалу критериев"
+      ]
+    },
+    {
+      version: "16",
+      type: "update",
+      title: "Редизайн интерфейса",
+      items: [
+        "Новая палитра: розовый акцент, янтарные оценки, голубой статус «Читаю»",
+        "Карточки в сетке — название и тип под обложкой, компактный бейдж статуса",
+        "Плавающая нижняя навигация с иконками",
+        "Колокольчик с индикатором новых обновлений вместо часов, поиск теперь скрывается за иконкой",
+        "Лёгкие анимации: появление карточек, пружинистые нажатия"
+      ]
+    },
+    {
+      version: "15",
+      type: "feature",
+      title: "Журнал обновлений",
+      items: ["Кнопка со списком всех изменений приложения по версиям"]
+    },
     {
       version: "14",
       type: "update",
@@ -240,24 +267,13 @@
     return "#34D399";
   }
 
-  // "legacy" — manhwa added before the two-phase system existed, skip straight to normal rating
+  // "legacy" — manhwa added before the emotion-pick system existed, skip straight to normal rating
   // "phase1" — needs the quick emotional pick first
-  // "waiting" — emotion picked, 12h cooldown not over yet
-  // "phase2" — cooldown over (or legacy), full criteria available
+  // "phase2" — emotion picked (or legacy), full criteria available
   function ratingPhase(m) {
     if (m.emotionRating === undefined) return "legacy";
     if (m.emotionRating === null) return "phase1";
-    var elapsed = Date.now() - (m.emotionRatedAt || 0);
-    if (elapsed < TWELVE_HOURS_MS) return "waiting";
     return "phase2";
-  }
-
-  function formatRemaining(ms) {
-    var totalMinutes = Math.max(0, Math.ceil(ms / 60000));
-    var h = Math.floor(totalMinutes / 60);
-    var m = totalMinutes % 60;
-    if (h <= 0) return m + " мин";
-    return h + " ч " + m + " мин";
   }
 
   function statusById(id) {
@@ -638,7 +654,8 @@
           '" data-open-id="' + m.id + '">' +
           (m.coverUrl ? "" : '<span class="mt-cover-fallback">' + escapeHtml((m.title[0] || "?").toUpperCase()) + "</span>") +
           '<span class="mt-cover-status" style="background:' + st.color + '">' + st.label + "</span>" +
-          '<span class="mt-cover-score">' + (avg === null ? "–" : avg.toFixed(1)) + "</span>" +
+          '<span class="mt-cover-score" style="border-color:' + scoreColor(avg) + ";color:" + scoreColor(avg) +
+          '">' + (avg === null ? "–" : avg.toFixed(1)) + "</span>" +
           "</div>" +
           '<div class="mt-cover-title" data-open-id="' + m.id + '">' + escapeHtml(m.title) + "</div>" +
           '<div class="mt-cover-type-line">' + ty.label + "</div>" +
@@ -760,33 +777,26 @@
       return (
         '<div class="mt-paper mt-emotion-panel">' +
         '<div class="mt-panel-title">ПЕРВОЕ ВПЕЧАТЛЕНИЕ</div>' +
-        '<div class="mt-emotion-hint">Оцени по горячим следам, сразу после прочтения — это только эмоция и на числовой рейтинг не повлияет. Полная оценка откроется через 12 часов.</div>' +
+        '<div class="mt-emotion-hint">Оцени по горячим следам, сразу после прочтения — это только эмоция и на числовой рейтинг не повлияет.</div>' +
         '<div class="mt-emotion-stars">' + stars + "</div>" +
         "</div>"
       );
     }
 
-    if (phase === "waiting") {
-      var remaining = TWELVE_HOURS_MS - (Date.now() - (m.emotionRatedAt || 0));
-      var pickedStars = "";
+    // phase === "legacy" or "phase2" — full criteria available
+    var emotionRecap = "";
+    if (typeof m.emotionRating === "number") {
+      var recapStars = "";
       for (var j = 1; j <= 5; j++) {
-        pickedStars += '<span class="mt-emotion-star-static' + (j <= m.emotionRating ? " filled" : "") + '">★</span>';
+        recapStars += '<span class="mt-emotion-star-static mini' + (j <= m.emotionRating ? " filled" : "") + '">★</span>';
       }
-      return (
-        '<div class="mt-paper mt-emotion-panel">' +
-        '<div class="mt-panel-title">ПЕРВОЕ ВПЕЧАТЛЕНИЕ</div>' +
-        '<div class="mt-emotion-stars-static">' + pickedStars + "</div>" +
-        '<div class="mt-emotion-label">' + escapeHtml(EMOTION_LABELS[m.emotionRating - 1]) + "</div>" +
-        '<div class="mt-wait-lock">' +
-        '<div class="mt-wait-lock-icon">⏳</div>' +
-        '<div class="mt-wait-lock-text">Полная оценка откроется через <b>' + formatRemaining(remaining) +
-        "</b><br>Фаза осмысления снижает влияние сиюминутных эмоций — клиффхэнгеров, обид, восторга.</div>" +
-        "</div></div>"
-      );
+      emotionRecap =
+        '<div class="mt-emotion-recap">' + recapStars +
+        '<span class="mt-emotion-recap-label">' + escapeHtml(EMOTION_LABELS[m.emotionRating - 1]) + "</span></div>";
     }
 
-    // phase === "legacy" or "phase2" — full criteria available
-    var html = '<div class="mt-paper mt-radar-panel">' + radarSvg(m.criteria, {}) + stampHtml(avg, 50) + "</div>" +
+    var html = '<div class="mt-paper mt-radar-panel">' + radarSvg(m.criteria, {}) + stampHtml(avg, 50) +
+      emotionRecap + "</div>" +
       '<div class="mt-paper mt-criteria-panel">';
 
     if (editable) {
@@ -1682,12 +1692,6 @@
   /* ---------- boot ---------- */
   load();
   render();
-
-  setInterval(function () {
-    if (!state.selectedId) return;
-    var m = findManhwa(state.selectedId);
-    if (m && ratingPhase(m) === "waiting") render();
-  }, 60000);
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function () {
