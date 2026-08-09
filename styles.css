@@ -512,6 +512,7 @@ input[type="range"].mt-slider::-moz-range-thumb {
   font-family: 'Manrope', sans-serif; cursor: pointer;
 }
 .mt-clear-btn.confirm { border-color: var(--red); color: var(--red); background: rgba(255,92,119,0.08); }
+.mt-edit-winners-confirming { border-color: var(--red) !important; color: var(--red) !important; background: rgba(255,92,119,0.08) !important; }
 
 .mt-tabbar {
   position: fixed; bottom: 0; left: 0; right: 0;

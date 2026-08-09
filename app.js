@@ -4,6 +4,7 @@
   var STORAGE_KEY = "manhwa-tracker:data:v1";
   var AWARDS_STORAGE_KEY = "manhwa-tracker:awards:v1";
   var AWARD_CANDIDATES_STORAGE_KEY = "manhwa-tracker:award-candidates:v1";
+  var AWARD_EDIT_USED_STORAGE_KEY = "manhwa-tracker:award-edit-used:v1";
 
   var DEFAULT_CRITERIA = ["Рисовка", "Сюжет", "Персонажи", "Динамика", "Атмосфера"];
 
@@ -62,6 +63,16 @@
 
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
+    {
+      version: "30",
+      type: "feature",
+      title: "Разовая правка победителей",
+      items: [
+        "После выбора всех победителей месяца доступна кнопка «Изменить победителей»",
+        "Сработает только один раз за месяц — список кандидатов сохраняется, нужно заново выбрать только победителей",
+        "После использования кнопка исчезает до начала следующего месяца"
+      ]
+    },
     {
       version: "29",
       type: "update",
@@ -364,6 +375,8 @@
     changelogSeenVersion: null,
     awardWinners: {},
     awardCandidates: {},
+    awardEditUsed: {},
+    confirmEditWinnersMonth: null,
     awardsView: "month",
     awardsCategory: null,
     revealManhwaId: null,
@@ -552,6 +565,19 @@
     return true;
   }
 
+  function canEditWinners(monthKey) {
+    return !state.awardEditUsed[monthKey];
+  }
+
+  // One-time-per-month "undo": clears the picked winners (keeps the candidate
+  // shortlists intact) and burns the month's single edit token.
+  function editWinners(monthKey) {
+    if (!canEditWinners(monthKey)) return;
+    state.awardEditUsed[monthKey] = true;
+    state.awardWinners[monthKey] = {};
+    saveAwards();
+  }
+
   function awardsForManhwa(m) {
     var result = [];
     Object.keys(state.awardWinners).forEach(function (monthKey) {
@@ -667,6 +693,12 @@
     } catch (e) {
       state.awardCandidates = {};
     }
+    try {
+      var rawEditUsed = window.localStorage.getItem(AWARD_EDIT_USED_STORAGE_KEY);
+      state.awardEditUsed = rawEditUsed ? JSON.parse(rawEditUsed) : {};
+    } catch (e) {
+      state.awardEditUsed = {};
+    }
 
     // One-time migration: titles imported with non-standard ids (e.g. bulk backups
     // like "m1", "m2"...) can't have their add-date recovered from the id tail,
@@ -700,6 +732,7 @@
     try {
       window.localStorage.setItem(AWARDS_STORAGE_KEY, JSON.stringify(state.awardWinners));
       window.localStorage.setItem(AWARD_CANDIDATES_STORAGE_KEY, JSON.stringify(state.awardCandidates));
+      window.localStorage.setItem(AWARD_EDIT_USED_STORAGE_KEY, JSON.stringify(state.awardEditUsed));
     } catch (e) {}
   }
 
@@ -1016,6 +1049,7 @@
     var allDecided = decidedCategories.length === availableCategories.length;
 
     if (allDecided) {
+      var editConfirming = state.confirmEditWinnersMonth === monthKey;
       html +=
         '<div class="mt-paper mt-award-panel">' +
         '<div class="mt-panel-title">🏆 ПОБЕДИТЕЛИ МЕСЯЦА</div>' +
@@ -1030,6 +1064,21 @@
           );
         }).join("") +
         "</div>";
+
+      if (canEditWinners(monthKey)) {
+        html +=
+          '<button class="mt-ghost-btn' + (editConfirming ? " mt-edit-winners-confirming" : "") +
+          '" id="edit-winners-btn" data-month="' + monthKey + '" style="width:100%;margin-top:10px">' +
+          (editConfirming
+            ? "Точно? Это единственная правка в этом месяце — нажми ещё раз"
+            : "✎ Изменить победителей (доступно 1 раз в месяц)") +
+          "</button>";
+      } else {
+        html +=
+          '<div class="mt-ceremony-hint" style="text-align:center;margin-top:10px">' +
+          "Правка победителей в этом месяце уже использована</div>";
+      }
+
       html += "</div>";
       return html;
     }
@@ -2174,6 +2223,20 @@
         render();
       });
     }
+
+    var editWinnersBtn = document.getElementById("edit-winners-btn");
+    if (editWinnersBtn) editWinnersBtn.addEventListener("click", function () {
+      var monthKey = editWinnersBtn.getAttribute("data-month");
+      if (state.confirmEditWinnersMonth === monthKey) {
+        editWinners(monthKey);
+        state.confirmEditWinnersMonth = null;
+        state.awardsCandidatesConfirmed = true;
+        render();
+      } else {
+        state.confirmEditWinnersMonth = monthKey;
+        render();
+      }
+    });
 
     app.querySelectorAll("[data-awards-view]").forEach(function (btn) {
       btn.addEventListener("click", function () {
