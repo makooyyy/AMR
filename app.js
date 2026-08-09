@@ -62,6 +62,15 @@
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
     {
+      version: "27",
+      type: "fix",
+      title: "Округление итоговой оценки",
+      items: [
+        "Итоговая оценка (0–90) теперь всегда целое число — например 69 вместо 68.9",
+        "Оценки отдельных критериев (Рисовка, Сюжет и т.д.) по-прежнему с шагом 0.5, как и раньше"
+      ]
+    },
+    {
       version: "26",
       type: "update",
       title: "Новая формула итоговой оценки",
@@ -397,6 +406,15 @@
     return "#34D399";
   }
 
+  // Same idea as scoreColor but for a single criterion's raw 1–10 value
+  // (used for sliders/bars and criterion-specific award nominees).
+  function criterionColor(v) {
+    if (v === null || v === undefined) return "#8880A0";
+    if (v < 5) return "#FF5C77";
+    if (v < 7.5) return "#F3A93C";
+    return "#34D399";
+  }
+
   // "legacy" — manhwa added before the emotion-pick system existed, skip straight to normal rating
   // "phase1" — needs the quick emotional pick first
   // "phase2" — emotion picked (or legacy), full criteria available
@@ -608,7 +626,7 @@
   function stampHtml(value, size) {
     size = size || 58;
     var color = scoreColor(value);
-    var display = value === null || value === undefined ? "—" : value.toFixed(1);
+    var display = value === null || value === undefined ? "—" : String(Math.round(value));
     return (
       '<div class="mt-stamp" style="width:' + size + "px;height:" + size + "px;" +
       "border:3px solid " + color + ";box-shadow:0 0 0 2.5px " + color + "33;" +
@@ -820,7 +838,7 @@
       '<div class="mt-chip-row" style="margin-top:14px">' +
       '<div class="mt-chip"><div class="mt-chip-value">' + titles.length + '</div><div class="mt-chip-label">тайтлов за год</div></div>' +
       '<div class="mt-chip"><div class="mt-chip-value" style="color:#FFB238">' +
-      (avg === null ? "—" : avg.toFixed(1)) + '</div><div class="mt-chip-label">средняя оценка</div></div>' +
+      (avg === null ? "—" : Math.round(avg)) + '</div><div class="mt-chip-label">средняя оценка</div></div>' +
       "</div>";
 
     if (topGenre) {
@@ -944,7 +962,8 @@
         '<div class="mt-nominee-info">' +
         '<div class="mt-nominee-title">' + escapeHtml(c.manhwa.title) + "</div>" +
         "</div>" +
-        '<span class="mt-nominee-score" style="color:' + scoreColor(c.score) + '">' + c.score.toFixed(1) + "</span>" +
+        '<span class="mt-nominee-score" style="color:' + (ck === "overall" ? scoreColor(c.score) : criterionColor(c.score)) + '">' +
+        (ck === "overall" ? Math.round(c.score) : c.score.toFixed(1)) + "</span>" +
         "</div>"
       );
     }).join("");
@@ -1101,7 +1120,7 @@
           '<span class="mt-cover-status" style="background:' + st.color + '">' + st.label + "</span>" +
           (awardsForManhwa(m).length > 0 ? '<span class="mt-cover-trophy">🏆</span>' : "") +
           '<span class="mt-cover-score" style="border-color:' + scoreColor(avg) + ";color:" + scoreColor(avg) +
-          '">' + (avg === null ? "–" : avg.toFixed(1)) + "</span>" +
+          '">' + (avg === null ? "–" : Math.round(avg)) + "</span>" +
           "</div>" +
           '<div class="mt-cover-title" data-open-id="' + m.id + '">' + escapeHtml(m.title) + "</div>" +
           '<div class="mt-cover-type-line">' + ty.label + "</div>" +
@@ -1268,7 +1287,7 @@
     if (editable) {
       html += '<div class="mt-lock-hint">Можно менять — не забудь нажать «Готово» внизу</div>';
       m.criteria.forEach(function (c) {
-        var color = scoreColor(c.score);
+        var color = criterionColor(c.score);
         var removable = m.criteria.length > 1;
         html +=
           '<div class="mt-crit-row" data-crit-id="' + c.id + '">' +
@@ -1285,7 +1304,7 @@
       });
     } else {
       m.criteria.forEach(function (c) {
-        var color = scoreColor(c.score);
+        var color = criterionColor(c.score);
         html +=
           '<div class="mt-bar-row"><span class="mt-bar-name">' + escapeHtml(c.name) + "</span>" +
           '<div class="mt-bar-track"><div class="mt-bar-fill" style="width:' + (c.score / 10) * 100 +
@@ -1424,7 +1443,7 @@
       '<div class="mt-reveal-cover">' + coverInner + "</div>" +
       '<div class="mt-reveal-title">' + escapeHtml(m.title) + "</div>" +
       '<div class="mt-reveal-stamp" style="border-color:' + color + ";color:" + color + '">' +
-      (avg === null ? "–" : avg.toFixed(1)) + "</div>" +
+      (avg === null ? "–" : Math.round(avg)) + "</div>" +
       notesHtml +
       '<button class="mt-primary-btn" id="reveal-close-btn" style="width:100%;margin-top:16px">Продолжить</button>' +
       "</div></div>"
@@ -1525,7 +1544,7 @@
       '<div class="mt-mini-row" data-open-id="' + m.id + '">' +
       '<div class="mt-mini-title">' + escapeHtml(m.title) + "</div>" +
       '<span class="mt-mini-score" style="color:#FFB238">' +
-      (avg === null ? "—" : avg.toFixed(1)) + "</span></div>"
+      (avg === null ? "—" : Math.round(avg)) + "</span></div>"
     );
   }
 
@@ -1545,7 +1564,7 @@
       '<div class="mt-chip-row">' +
       '<div class="mt-chip"><div class="mt-chip-value">' + state.manhwas.length + '</div><div class="mt-chip-label">манхв в списке</div></div>' +
       '<div class="mt-chip"><div class="mt-chip-value" style="color:#FFB238">' +
-      (overallAvg === null ? "—" : overallAvg.toFixed(1)) + '</div><div class="mt-chip-label">средняя оценка</div></div>' +
+      (overallAvg === null ? "—" : Math.round(overallAvg)) + '</div><div class="mt-chip-label">средняя оценка</div></div>' +
       "</div>";
 
     // status bar
@@ -2012,7 +2031,7 @@
         var label = app.querySelector('[data-score-label="' + critId + '"]');
         if (label) {
           label.textContent = val.toFixed(1);
-          label.style.color = scoreColor(val);
+          label.style.color = criterionColor(val);
         }
         if (selected) {
           var c = selected.criteria.find(function (cc) { return cc.id === critId; });
