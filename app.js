@@ -62,6 +62,15 @@
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
     {
+      version: "28",
+      type: "fix",
+      title: "Награды для импортированных тайтлов",
+      items: [
+        "Тайтлы с нестандартным ID (например, из массового импорта списком) не получали дату добавления и никогда не участвовали в наградах",
+        "Теперь при запуске им автоматически проставляется дата — и они сразу попадают в текущие номинации"
+      ]
+    },
+    {
       version: "27",
       type: "fix",
       title: "Округление итоговой оценки",
@@ -605,6 +614,24 @@
     } catch (e) {
       state.awardWinners = {};
     }
+
+    // One-time migration: titles imported with non-standard ids (e.g. bulk backups
+    // like "m1", "m2"...) can't have their add-date recovered from the id tail,
+    // which silently excluded them from awards forever. Back-date them to the
+    // middle of last month so they show up in the awards right away instead of
+    // waiting a full month for a "real" date to accumulate.
+    var migrated = false;
+    var fallbackDate = new Date();
+    fallbackDate.setMonth(fallbackDate.getMonth() - 1);
+    fallbackDate.setDate(15);
+    var fallbackCreatedAt = fallbackDate.getTime();
+    state.manhwas.forEach(function (m) {
+      if (typeof m.createdAt !== "number" && getCreatedAt(m) === null) {
+        m.createdAt = fallbackCreatedAt;
+        migrated = true;
+      }
+    });
+    if (migrated) save();
   }
 
   function save() {
