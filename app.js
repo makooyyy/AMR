@@ -3,6 +3,7 @@
 
   var STORAGE_KEY = "manhwa-tracker:data:v1";
   var AWARDS_STORAGE_KEY = "manhwa-tracker:awards:v1";
+  var AWARD_CANDIDATES_STORAGE_KEY = "manhwa-tracker:award-candidates:v1";
 
   var DEFAULT_CRITERIA = ["Рисовка", "Сюжет", "Персонажи", "Динамика", "Атмосфера"];
 
@@ -61,6 +62,17 @@
 
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
+    {
+      version: "29",
+      type: "update",
+      title: "Ручной выбор кандидатов на премию",
+      items: [
+        "Больше никакого авто-топ-5 — сам отмечаешь, кто вообще претендует на награду в каждой номинации",
+        "Выбор победителя теперь с подтверждением и необратим — один раз выбрал, и всё",
+        "Список кандидатов можно менять, пока победитель ещё не выбран",
+        "Когда решены все номинации месяца — вкладка показывает просто список победителей"
+      ]
+    },
     {
       version: "28",
       type: "fix",
@@ -351,6 +363,7 @@
     showSearch: false,
     changelogSeenVersion: null,
     awardWinners: {},
+    awardCandidates: {},
     awardsView: "month",
     awardsCategory: null,
     revealManhwaId: null,
@@ -364,6 +377,8 @@
     addingCriterion: false,
     confirmClear: false,
     confirmDeleteId: null,
+    confirmWinnerPick: null,
+    awardsCandidatesConfirmed: false,
     unlockedIds: {},
     error: null
   };
@@ -465,13 +480,9 @@
     });
   }
 
-  function monthHasCandidates(monthKey) {
-    return eligibleForMonth(monthKey).length > 0;
-  }
-
-  // Top candidates for one category, sorted best-first — the shortlist the user picks from.
-  function getCandidates(monthKey, categoryKey, limit) {
-    limit = limit || 5;
+  // Full eligible pool for one category, sorted best-first (used both as the
+  // pick-list for choosing candidates and to display their scores).
+  function eligiblePoolForCategory(monthKey, categoryKey) {
     var eligible = eligibleForMonth(monthKey);
     var scored = [];
     eligible.forEach(function (m) {
@@ -484,7 +495,40 @@
       }
     });
     scored.sort(function (a, b) { return b.score - a.score; });
-    return scored.slice(0, limit);
+    return scored;
+  }
+
+  function getCandidateIds(monthKey, categoryKey) {
+    var byMonth = state.awardCandidates[monthKey];
+    return (byMonth && byMonth[categoryKey]) || [];
+  }
+
+  function toggleCandidate(monthKey, categoryKey, manhwaId) {
+    if (!state.awardCandidates[monthKey]) state.awardCandidates[monthKey] = {};
+    if (!state.awardCandidates[monthKey][categoryKey]) state.awardCandidates[monthKey][categoryKey] = [];
+    var list = state.awardCandidates[monthKey][categoryKey];
+    var idx = list.indexOf(manhwaId);
+    if (idx === -1) list.push(manhwaId); else list.splice(idx, 1);
+    saveAwards();
+  }
+
+  // Chosen candidates for a category, resolved to manhwa+score, best-first.
+  function candidateEntries(monthKey, categoryKey) {
+    var ids = getCandidateIds(monthKey, categoryKey);
+    return eligiblePoolForCategory(monthKey, categoryKey).filter(function (e) {
+      return ids.indexOf(e.manhwa.id) !== -1;
+    });
+  }
+
+  // Categories worth showing for a month — at least one eligible title exists for them.
+  function availableCategoriesForMonth(monthKey) {
+    return AWARD_CATEGORY_KEYS.filter(function (ck) {
+      return eligiblePoolForCategory(monthKey, ck).length > 0;
+    });
+  }
+
+  function monthHasCandidates(monthKey) {
+    return eligibleForMonth(monthKey).length > 0;
   }
 
   function lastCompletedMonthKey() {
@@ -499,10 +543,13 @@
     return findManhwa(picks[categoryKey]);
   }
 
+  // Winners are permanent once set — this refuses to overwrite an existing pick.
   function setWinner(monthKey, categoryKey, manhwaId) {
     if (!state.awardWinners[monthKey]) state.awardWinners[monthKey] = {};
+    if (state.awardWinners[monthKey][categoryKey]) return false;
     state.awardWinners[monthKey][categoryKey] = manhwaId;
     saveAwards();
+    return true;
   }
 
   function awardsForManhwa(m) {
@@ -614,6 +661,12 @@
     } catch (e) {
       state.awardWinners = {};
     }
+    try {
+      var rawCandidates = window.localStorage.getItem(AWARD_CANDIDATES_STORAGE_KEY);
+      state.awardCandidates = rawCandidates ? JSON.parse(rawCandidates) : {};
+    } catch (e) {
+      state.awardCandidates = {};
+    }
 
     // One-time migration: titles imported with non-standard ids (e.g. bulk backups
     // like "m1", "m2"...) can't have their add-date recovered from the id tail,
@@ -646,6 +699,7 @@
   function saveAwards() {
     try {
       window.localStorage.setItem(AWARDS_STORAGE_KEY, JSON.stringify(state.awardWinners));
+      window.localStorage.setItem(AWARD_CANDIDATES_STORAGE_KEY, JSON.stringify(state.awardCandidates));
     } catch (e) {}
   }
 
@@ -948,9 +1002,7 @@
       return html;
     }
 
-    var availableCategories = AWARD_CATEGORY_KEYS.filter(function (ck) {
-      return getCandidates(monthKey, ck, 5).length > 0;
-    });
+    var availableCategories = availableCategoriesForMonth(monthKey);
 
     if (!availableCategories.length) {
       html +=
@@ -960,8 +1012,30 @@
       return html;
     }
 
+    var decidedCategories = availableCategories.filter(function (ck) { return !!getWinner(monthKey, ck); });
+    var allDecided = decidedCategories.length === availableCategories.length;
+
+    if (allDecided) {
+      html +=
+        '<div class="mt-paper mt-award-panel">' +
+        '<div class="mt-panel-title">🏆 ПОБЕДИТЕЛИ МЕСЯЦА</div>' +
+        availableCategories.map(function (ck) {
+          var w = getWinner(monthKey, ck);
+          return (
+            '<div class="mt-award-row" data-open-id="' + w.id + '">' +
+            '<span class="mt-award-trophy">🏆</span>' +
+            '<div class="mt-award-info"><div class="mt-award-title">' + escapeHtml(AWARD_LABELS[ck] || ck) + "</div>" +
+            '<div class="mt-award-sub">' + escapeHtml(w.title) + "</div></div>" +
+            "</div>"
+          );
+        }).join("") +
+        "</div>";
+      html += "</div>";
+      return html;
+    }
+
     if (!state.awardsCategory || availableCategories.indexOf(state.awardsCategory) === -1) {
-      state.awardsCategory = availableCategories[0];
+      state.awardsCategory = availableCategories.filter(function (ck) { return !getWinner(monthKey, ck); })[0] || availableCategories[0];
     }
 
     var categoryChips = availableCategories.map(function (ck) {
@@ -977,30 +1051,71 @@
     html += '<div class="mt-category-chip-row">' + categoryChips + "</div>";
 
     var ck = state.awardsCategory;
-    var candidates = getCandidates(monthKey, ck, 5);
     var winner = getWinner(monthKey, ck);
+    var pool = eligiblePoolForCategory(monthKey, ck);
+    var candidates = candidateEntries(monthKey, ck);
 
-    var rows = candidates.map(function (c) {
-      var isWinner = winner && winner.id === c.manhwa.id;
-      return (
-        '<div class="mt-nominee-row' + (isWinner ? " picked" : "") + '" data-pick-winner="' + c.manhwa.id +
-        '" data-month="' + monthKey + '" data-category="' + escapeHtml(ck) + '">' +
-        '<span class="mt-nominee-trophy">' + (isWinner ? "🏆" : "") + "</span>" +
-        '<div class="mt-nominee-info">' +
-        '<div class="mt-nominee-title">' + escapeHtml(c.manhwa.title) + "</div>" +
-        "</div>" +
-        '<span class="mt-nominee-score" style="color:' + (ck === "overall" ? scoreColor(c.score) : criterionColor(c.score)) + '">' +
-        (ck === "overall" ? Math.round(c.score) : c.score.toFixed(1)) + "</span>" +
-        "</div>"
-      );
-    }).join("");
+    if (winner) {
+      // Locked — winner already chosen, nothing left to do here.
+      html +=
+        '<div class="mt-paper mt-award-panel">' +
+        '<div class="mt-panel-title">' + escapeHtml(AWARD_LABELS[ck] || ck) + "</div>" +
+        '<div class="mt-award-row" data-open-id="' + winner.id + '">' +
+        '<span class="mt-award-trophy">🏆</span>' +
+        '<div class="mt-award-info"><div class="mt-award-title">' + escapeHtml(winner.title) + "</div>" +
+        '<div class="mt-award-sub">Победитель выбран — изменить нельзя</div></div>' +
+        "</div></div>";
+    } else if (!state.awardsCandidatesConfirmed) {
+      // Step 1: pick who's even in the running (multi-select, stays until confirmed).
+      var candidateIds = getCandidateIds(monthKey, ck);
+      var pickRows = pool.map(function (p) {
+        var checked = candidateIds.indexOf(p.manhwa.id) !== -1;
+        return (
+          '<div class="mt-nominee-row' + (checked ? " picked" : "") + '" data-toggle-candidate="' + p.manhwa.id +
+          '" data-month="' + monthKey + '" data-category="' + escapeHtml(ck) + '">' +
+          '<span class="mt-nominee-checkbox">' + (checked ? "☑" : "☐") + "</span>" +
+          '<div class="mt-nominee-info"><div class="mt-nominee-title">' + escapeHtml(p.manhwa.title) + "</div></div>" +
+          '<span class="mt-nominee-score" style="color:' + (ck === "overall" ? scoreColor(p.score) : criterionColor(p.score)) + '">' +
+          (ck === "overall" ? Math.round(p.score) : p.score.toFixed(1)) + "</span>" +
+          "</div>"
+        );
+      }).join("");
 
-    html +=
-      '<div class="mt-paper">' +
-      '<div class="mt-panel-title">' + escapeHtml(AWARD_LABELS[ck] || ck) + "</div>" +
-      '<div class="mt-ceremony-hint">Топ-кандидаты месяца — выбери победителя</div>' +
-      rows +
-      "</div>";
+      html +=
+        '<div class="mt-paper">' +
+        '<div class="mt-panel-title">' + escapeHtml(AWARD_LABELS[ck] || ck) + "</div>" +
+        '<div class="mt-ceremony-hint">Отметь тайтлы, которые претендуют на эту награду</div>' +
+        pickRows +
+        '<button class="mt-primary-btn" id="confirm-candidates-btn"' +
+        (candidateIds.length === 0 ? " disabled" : "") +
+        ' style="width:100%;margin-top:10px">Готово — выбрать победителя (' + candidateIds.length + ')</button>' +
+        "</div>";
+    } else {
+      // Step 2: crown one of the chosen candidates.
+      var rows = candidates.map(function (c) {
+        var pickKey = monthKey + "|" + ck + "|" + c.manhwa.id;
+        var confirming = state.confirmWinnerPick === pickKey;
+        return (
+          '<div class="mt-nominee-row' + (confirming ? " confirming" : "") + '" data-pick-winner="' + c.manhwa.id +
+          '" data-month="' + monthKey + '" data-category="' + escapeHtml(ck) + '">' +
+          '<span class="mt-nominee-trophy">' + (confirming ? "🏆" : "") + "</span>" +
+          '<div class="mt-nominee-info"><div class="mt-nominee-title">' + escapeHtml(c.manhwa.title) + "</div>" +
+          (confirming ? '<div class="mt-nominee-confirm">Точно этот? Нажми ещё раз</div>' : "") + "</div>" +
+          '<span class="mt-nominee-score" style="color:' + (ck === "overall" ? scoreColor(c.score) : criterionColor(c.score)) + '">' +
+          (ck === "overall" ? Math.round(c.score) : c.score.toFixed(1)) + "</span>" +
+          "</div>"
+        );
+      }).join("");
+
+      html +=
+        '<div class="mt-paper">' +
+        '<div class="mt-panel-title">' + escapeHtml(AWARD_LABELS[ck] || ck) + "</div>" +
+        '<div class="mt-ceremony-hint">Выбери победителя среди кандидатов — выбор нельзя будет изменить</div>' +
+        rows +
+        '<button class="mt-ghost-btn" id="edit-candidates-btn"' +
+        ' style="width:100%;margin-top:10px">✎ Изменить список кандидатов</button>' +
+        "</div>";
+    }
 
     html += "</div>";
     return html;
@@ -2024,10 +2139,41 @@
         var manhwaId = row.getAttribute("data-pick-winner");
         var monthKey = row.getAttribute("data-month");
         var categoryKey = row.getAttribute("data-category");
-        setWinner(monthKey, categoryKey, manhwaId);
+        var pickKey = monthKey + "|" + categoryKey + "|" + manhwaId;
+        if (state.confirmWinnerPick === pickKey) {
+          setWinner(monthKey, categoryKey, manhwaId);
+          state.confirmWinnerPick = null;
+          render();
+        } else {
+          state.confirmWinnerPick = pickKey;
+          render();
+        }
+      });
+    });
+
+    app.querySelectorAll("[data-toggle-candidate]").forEach(function (row) {
+      row.addEventListener("click", function () {
+        var manhwaId = row.getAttribute("data-toggle-candidate");
+        var monthKey = row.getAttribute("data-month");
+        var categoryKey = row.getAttribute("data-category");
+        toggleCandidate(monthKey, categoryKey, manhwaId);
         render();
       });
     });
+
+    var editCandidatesBtn = document.getElementById("edit-candidates-btn");
+    if (editCandidatesBtn) editCandidatesBtn.addEventListener("click", function () {
+      state.awardsCandidatesConfirmed = false;
+      render();
+    });
+
+    var confirmCandidatesBtn = document.getElementById("confirm-candidates-btn");
+    if (confirmCandidatesBtn && !confirmCandidatesBtn.hasAttribute("disabled")) {
+      confirmCandidatesBtn.addEventListener("click", function () {
+        state.awardsCandidatesConfirmed = true;
+        render();
+      });
+    }
 
     app.querySelectorAll("[data-awards-view]").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -2039,6 +2185,8 @@
     app.querySelectorAll("[data-award-category]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         state.awardsCategory = btn.getAttribute("data-award-category");
+        state.confirmWinnerPick = null;
+        state.awardsCandidatesConfirmed = false;
         render();
       });
     });

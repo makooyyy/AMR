@@ -436,13 +436,17 @@ input[type="range"].mt-slider::-moz-range-thumb {
 .mt-nominee-row:active { transform: scale(0.98); }
 .mt-nominee-row + .mt-nominee-row { margin-top: 8px; }
 .mt-nominee-row.picked { border-color: var(--amber); background: rgba(255,178,56,0.1); }
+.mt-nominee-row.confirming { border-color: var(--red); background: rgba(255,92,119,0.1); }
 .mt-nominee-trophy { width: 20px; text-align: center; font-size: 15px; flex-shrink: 0; }
+.mt-nominee-checkbox { width: 20px; text-align: center; font-size: 16px; flex-shrink: 0; color: var(--amber); }
 .mt-nominee-info { flex: 1; min-width: 0; }
 .mt-nominee-title {
   font-weight: 700; font-size: 13.5px; color: var(--text-primary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.mt-nominee-confirm { font-size: 11px; color: var(--red); font-weight: 700; margin-top: 2px; }
 .mt-nominee-score { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+.mt-primary-btn[disabled] { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
 .mt-year-genre {
   font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 20px; color: var(--text-primary);
   display: flex; align-items: baseline; gap: 8px;
