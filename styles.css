@@ -604,9 +604,9 @@ input[type="range"].mt-slider::-moz-range-thumb {
   animation: mtRevealFadeUp .35s ease .28s both;
 }
 .mt-reveal-stamp {
-  margin-top: 14px; width: 74px; height: 74px; border-radius: 50%;
+  margin-top: 14px; width: 84px; height: 84px; border-radius: 50%;
   border: 3px solid; display: flex; align-items: center; justify-content: center;
-  font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 26px;
+  font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 22px;
   box-shadow: 0 0 24px currentColor;
   animation: mtRevealStampIn .55s cubic-bezier(.22,1.4,.4,1) .42s both;
 }

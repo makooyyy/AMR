@@ -62,6 +62,17 @@
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
     {
+      version: "26",
+      type: "update",
+      title: "Новая формула итоговой оценки",
+      items: [
+        "Итог теперь считается так: (Рисовка + Сюжет + Персонажи + Динамика) × 0.225 × Атмосфера",
+        "Атмосфера действует как множитель — сильно влияет на итог, а не просто ещё один критерий",
+        "Шкала итоговой оценки — от 0 до 90 вместо прежних 1–10",
+        "Свои дополнительные критерии в формулу не входят — они по-прежнему просто для себя"
+      ]
+    },
+    {
       version: "25",
       type: "feature",
       title: "Окно первой оценки",
@@ -350,17 +361,39 @@
     return div.innerHTML;
   }
 
+  // New scoring formula: (Рисовка + Сюжет + Персонажи + Динамика) × 0.225 × Атмосфера.
+  // Mathematically identical to "(...) × 1.4 × Атмосфера" scaled down to a 0–90 range
+  // (1.4 × 90/560 = 0.225 exactly), so the max score lands on exactly 90 as requested.
+  // Custom (non-default) criteria don't factor into this — they're informational only.
   function average(criteria) {
     if (!criteria.length) return null;
-    var sum = 0;
-    for (var i = 0; i < criteria.length; i++) sum += criteria[i].score;
-    return sum / criteria.length;
+    var find = function (name) {
+      var c = criteria.find(function (cc) { return cc.name === name; });
+      return c ? c.score : null;
+    };
+    var art = find("Рисовка");
+    var plot = find("Сюжет");
+    var chars = find("Персонажи");
+    var dynamics = find("Динамика");
+    var atmosphereRaw = find("Атмосфера");
+
+    // Fall back to a plain average if this isn't a "standard" rated title
+    // (e.g. all default criteria were removed) so we never silently show 0.
+    if (art === null && plot === null && chars === null && dynamics === null && atmosphereRaw === null) {
+      var sum = 0;
+      for (var i = 0; i < criteria.length; i++) sum += criteria[i].score;
+      return sum / criteria.length;
+    }
+
+    var baseSum = (art || 0) + (plot || 0) + (chars || 0) + (dynamics || 0);
+    var atmosphere = atmosphereRaw === null ? 1 : atmosphereRaw;
+    return baseSum * 0.225 * atmosphere;
   }
 
   function scoreColor(v) {
     if (v === null || v === undefined) return "#8880A0";
-    if (v < 5) return "#FF5C77";
-    if (v < 7.5) return "#F3A93C";
+    if (v < 45) return "#FF5C77";
+    if (v < 67.5) return "#F3A93C";
     return "#34D399";
   }
 
@@ -580,7 +613,7 @@
       '<div class="mt-stamp" style="width:' + size + "px;height:" + size + "px;" +
       "border:3px solid " + color + ";box-shadow:0 0 0 2.5px " + color + "33;" +
       "background:" + color + '12;">' +
-      '<span style="font-size:' + (size * 0.36) + "px;color:" + color + ';">' + display + "</span>" +
+      '<span style="font-size:' + (size * 0.3) + "px;color:" + color + ';">' + display + "</span>" +
       "</div>"
     );
   }
