@@ -64,6 +64,15 @@
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
     {
+      version: "31",
+      type: "fix",
+      title: "Пропавшие кандидаты в наградах",
+      items: [
+        "У тайтлов из самого первого массового импорта не было поля «оценено» вообще — награды считали их неоценёнными и не допускали до номинаций",
+        "Теперь при запуске они автоматически помечаются как оценённые наравне с остальными"
+      ]
+    },
+    {
       version: "30",
       type: "feature",
       title: "Разовая правка победителей",
@@ -713,6 +722,13 @@
     state.manhwas.forEach(function (m) {
       if (typeof m.createdAt !== "number" && getCreatedAt(m) === null) {
         m.createdAt = fallbackCreatedAt;
+        migrated = true;
+      }
+      // Same bulk imports never had a "rated" field at all (not even false),
+      // which made eligibleForMonth() silently skip them — they display as
+      // normal finished titles everywhere else, so treat them as rated here too.
+      if (typeof m.rated !== "boolean") {
+        m.rated = true;
         migrated = true;
       }
     });
