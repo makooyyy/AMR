@@ -64,6 +64,26 @@
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
     {
+      version: "33",
+      type: "update",
+      title: "Шкала оценки до 100",
+      items: [
+        "Максимум итоговой оценки теперь ровно 100 (было 90)",
+        "Формула та же по структуре: (Рисовка + Сюжет + Персонажи + Динамика) × 0.25 × Атмосфера",
+        "Уже выставленные оценки автоматически пересчитаются по новой формуле — ничего вручную переставлять не нужно"
+      ]
+    },
+    {
+      version: "32",
+      type: "update",
+      title: "Победители — теперь с обложками",
+      items: [
+        "«Победители месяца», «Тайтл года» и «Все чемпионы года» показываются карточками с обложкой, а не просто текстом",
+        "Карточки можно листать свайпом влево-вправо",
+        "Тап по карточке открывает тайтл"
+      ]
+    },
+    {
       version: "31",
       type: "fix",
       title: "Пропавшие кандидаты в наградах",
@@ -416,9 +436,8 @@
     return div.innerHTML;
   }
 
-  // New scoring formula: (Рисовка + Сюжет + Персонажи + Динамика) × 0.225 × Атмосфера.
-  // Mathematically identical to "(...) × 1.4 × Атмосфера" scaled down to a 0–90 range
-  // (1.4 × 90/560 = 0.225 exactly), so the max score lands on exactly 90 as requested.
+  // Scoring formula: (Рисовка + Сюжет + Персонажи + Динамика) × 0.25 × Атмосфера.
+  // Max: 40 × 0.25 × 10 = 100 exactly.
   // Custom (non-default) criteria don't factor into this — they're informational only.
   function average(criteria) {
     if (!criteria.length) return null;
@@ -442,13 +461,13 @@
 
     var baseSum = (art || 0) + (plot || 0) + (chars || 0) + (dynamics || 0);
     var atmosphere = atmosphereRaw === null ? 1 : atmosphereRaw;
-    return baseSum * 0.225 * atmosphere;
+    return baseSum * 0.25 * atmosphere;
   }
 
   function scoreColor(v) {
     if (v === null || v === undefined) return "#8880A0";
-    if (v < 45) return "#FF5C77";
-    if (v < 67.5) return "#F3A93C";
+    if (v < 50) return "#FF5C77";
+    if (v < 75) return "#F3A93C";
     return "#34D399";
   }
 
@@ -981,26 +1000,17 @@
     if (champions.length > 0) {
       var top = champions[0];
       html +=
-        '<div class="mt-paper mt-award-panel">' +
-        '<div class="mt-panel-title">🏆 ТАЙТЛ ГОДА</div>' +
-        '<div class="mt-award-row" data-open-id="' + top.manhwa.id + '">' +
-        '<span class="mt-award-trophy">🏆</span>' +
-        '<div class="mt-award-info"><div class="mt-award-title">' + escapeHtml(top.manhwa.title) + "</div>" +
-        '<div class="mt-award-sub">' + top.count + " " + winWord(top.count) + " за год</div></div>" +
-        "</div></div>";
+        '<div class="mt-winner-section-title">🏆 ТАЙТЛ ГОДА</div>' +
+        '<div class="mt-winner-carousel">' +
+        championCardHtml(top.manhwa, top.count + " " + winWord(top.count) + " за год") +
+        "</div>";
 
       if (champions.length > 1) {
         html +=
-          '<div class="mt-paper"><div class="mt-panel-title">ВСЕ ЧЕМПИОНЫ ГОДА</div>' +
+          '<div class="mt-winner-section-title" style="margin-top:8px">ВСЕ ЧЕМПИОНЫ ГОДА</div>' +
+          '<div class="mt-winner-carousel">' +
           champions.map(function (c) {
-            return (
-              '<div class="mt-award-row" data-open-id="' + c.manhwa.id + '">' +
-              '<span class="mt-award-trophy">🏆</span>' +
-              '<div class="mt-award-info"><div class="mt-award-title" style="color:var(--text-primary)">' +
-              escapeHtml(c.manhwa.title) + "</div></div>" +
-              '<span class="mt-award-score">×' + c.count + "</span>" +
-              "</div>"
-            );
+            return championCardHtml(c.manhwa, "×" + c.count + " " + winWord(c.count));
           }).join("") +
           "</div>";
       }
@@ -1017,6 +1027,38 @@
     if (mod10 === 1 && mod100 !== 11) return "победа";
     if ([2, 3, 4].indexOf(mod10) !== -1 && [12, 13, 14].indexOf(mod100) === -1) return "победы";
     return "побед";
+  }
+
+  function championCardHtml(m, subtitle) {
+    var coverStyle = m.coverUrl
+      ? "background-image:url('" + escapeHtml(m.coverUrl).replace(/'/g, "%27") + "')"
+      : "";
+    return (
+      '<div class="mt-winner-card" data-open-id="' + m.id + '">' +
+      '<div class="mt-winner-cover' + (m.coverUrl ? "" : " mt-winner-cover-empty") + '" style="' + coverStyle + '">' +
+      (m.coverUrl ? "" : '<span class="mt-winner-cover-fallback">' + escapeHtml((m.title[0] || "?").toUpperCase()) + "</span>") +
+      '<span class="mt-winner-trophy-badge">🏆</span>' +
+      "</div>" +
+      '<div class="mt-winner-category">' + escapeHtml(subtitle) + "</div>" +
+      '<div class="mt-winner-title">' + escapeHtml(m.title) + "</div>" +
+      "</div>"
+    );
+  }
+
+  function winnerCardHtml(ck, w) {
+    var coverStyle = w.coverUrl
+      ? "background-image:url('" + escapeHtml(w.coverUrl).replace(/'/g, "%27") + "')"
+      : "";
+    return (
+      '<div class="mt-winner-card" data-open-id="' + w.id + '">' +
+      '<div class="mt-winner-cover' + (w.coverUrl ? "" : " mt-winner-cover-empty") + '" style="' + coverStyle + '">' +
+      (w.coverUrl ? "" : '<span class="mt-winner-cover-fallback">' + escapeHtml((w.title[0] || "?").toUpperCase()) + "</span>") +
+      '<span class="mt-winner-trophy-badge">🏆</span>' +
+      "</div>" +
+      '<div class="mt-winner-category">' + escapeHtml(AWARD_LABELS[ck] || ck) + "</div>" +
+      '<div class="mt-winner-title">' + escapeHtml(w.title) + "</div>" +
+      "</div>"
+    );
   }
 
   function renderAwardsTab() {
@@ -1067,17 +1109,10 @@
     if (allDecided) {
       var editConfirming = state.confirmEditWinnersMonth === monthKey;
       html +=
-        '<div class="mt-paper mt-award-panel">' +
-        '<div class="mt-panel-title">🏆 ПОБЕДИТЕЛИ МЕСЯЦА</div>' +
+        '<div class="mt-winner-section-title">🏆 ПОБЕДИТЕЛИ МЕСЯЦА</div>' +
+        '<div class="mt-winner-carousel">' +
         availableCategories.map(function (ck) {
-          var w = getWinner(monthKey, ck);
-          return (
-            '<div class="mt-award-row" data-open-id="' + w.id + '">' +
-            '<span class="mt-award-trophy">🏆</span>' +
-            '<div class="mt-award-info"><div class="mt-award-title">' + escapeHtml(AWARD_LABELS[ck] || ck) + "</div>" +
-            '<div class="mt-award-sub">' + escapeHtml(w.title) + "</div></div>" +
-            "</div>"
-          );
+          return winnerCardHtml(ck, getWinner(monthKey, ck));
         }).join("") +
         "</div>";
 
