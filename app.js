@@ -64,6 +64,15 @@
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
     {
+      version: "34",
+      type: "update",
+      title: "Золотая рамка у победителей",
+      items: [
+        "У тайтлов, выигравших хоть одну награду, обложка теперь с тонкой золотой рамкой — в общей сетке и на странице тайтла",
+        "Сделано ненавязчиво, чтобы не спорило с самим кубком-значком"
+      ]
+    },
+    {
       version: "33",
       type: "update",
       title: "Шкала оценки до 100",
@@ -1350,17 +1359,18 @@
         var avg = average(m.criteria);
         var st = statusById(m.status);
         var ty = typeById(m.type || "manhwa");
+        var isWinnerTitle = awardsForManhwa(m).length > 0;
         var coverStyle = m.coverUrl
           ? "background-image:url('" + escapeHtml(m.coverUrl).replace(/'/g, "%27") + "')"
           : "";
 
         html +=
           '<div class="mt-grid-card" style="animation-delay:' + Math.min(gridIdx * 30, 240) + 'ms">' +
-          '<div class="mt-cover' + (m.coverUrl ? "" : " mt-cover-empty") + '" style="' + coverStyle +
-          '" data-open-id="' + m.id + '">' +
+          '<div class="mt-cover' + (m.coverUrl ? "" : " mt-cover-empty") + (isWinnerTitle ? " mt-cover-winner" : "") +
+          '" style="' + coverStyle + '" data-open-id="' + m.id + '">' +
           (m.coverUrl ? "" : '<span class="mt-cover-fallback">' + escapeHtml((m.title[0] || "?").toUpperCase()) + "</span>") +
           '<span class="mt-cover-status" style="background:' + st.color + '">' + st.label + "</span>" +
-          (awardsForManhwa(m).length > 0 ? '<span class="mt-cover-trophy">🏆</span>' : "") +
+          (isWinnerTitle ? '<span class="mt-cover-trophy">🏆</span>' : "") +
           '<span class="mt-cover-score" style="border-color:' + scoreColor(avg) + ";color:" + scoreColor(avg) +
           '">' + (avg === null ? "–" : Math.round(avg)) + "</span>" +
           "</div>" +
@@ -1710,16 +1720,17 @@
       renderErrorBanner() +
       '<div class="mt-detail-body">';
 
+    var wins = awardsForManhwa(m);
+
     if (m.coverUrl) {
       var coverUrlSafe = escapeHtml(m.coverUrl).replace(/'/g, "%27");
       html +=
-        '<div class="mt-hero-wrap">' +
+        '<div class="mt-hero-wrap' + (wins.length > 0 ? " mt-hero-winner" : "") + '">' +
         '<div class="mt-hero-bg" style="background-image:url(\'' + coverUrlSafe + "')\"></div>" +
         '<img class="mt-hero-fg" src="' + coverUrlSafe + '" alt="" />' +
         "</div>";
     }
 
-    var wins = awardsForManhwa(m);
     if (wins.length > 0) {
       html +=
         '<div class="mt-paper mt-award-panel">' +

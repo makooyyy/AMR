@@ -159,6 +159,10 @@ body {
   transition: transform .15s ease;
 }
 .mt-cover:active { transform: scale(0.97); }
+.mt-cover-winner {
+  border: 1.5px solid rgba(255,178,56,0.55);
+  box-shadow: 0 8px 18px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,178,56,0.18);
+}
 .mt-cover-empty {
   background-image: linear-gradient(165deg, #201a2c, #14101c);
   display: flex; align-items: center; justify-content: center;
@@ -495,6 +499,10 @@ input[type="range"].mt-slider::-moz-range-thumb {
   position: relative; width: 100%; height: 240px; border-radius: 16px; overflow: hidden;
   background-color: var(--card-bg); border: 1px solid var(--card-border);
   display: flex; align-items: center; justify-content: center;
+}
+.mt-hero-winner {
+  border-color: rgba(255,178,56,0.5);
+  box-shadow: 0 0 0 1px rgba(255,178,56,0.18);
 }
 .mt-hero-bg {
   position: absolute; inset: 0; background-size: cover; background-position: center;
