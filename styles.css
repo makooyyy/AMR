@@ -355,6 +355,10 @@ body {
 .mt-crit-row { display: flex; flex-direction: column; gap: 7px; }
 .mt-crit-top { display: flex; justify-content: space-between; align-items: baseline; }
 .mt-crit-name { font-size: 13.5px; color: var(--text-primary); font-weight: 700; }
+.mt-weight-tag {
+  font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; color: var(--text-faint);
+  background: rgba(255,255,255,0.06); border-radius: 6px; padding: 1px 5px; margin-left: 6px;
+}
 .mt-crit-right { display: flex; align-items: center; gap: 8px; }
 .mt-crit-score { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 15px; min-width: 30px; text-align: right; }
 

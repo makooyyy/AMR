@@ -6,7 +6,7 @@
   var AWARD_CANDIDATES_STORAGE_KEY = "manhwa-tracker:award-candidates:v1";
   var AWARD_EDIT_USED_STORAGE_KEY = "manhwa-tracker:award-edit-used:v1";
 
-  var DEFAULT_CRITERIA = ["Рисовка", "Сюжет", "Персонажи", "Динамика", "Атмосфера"];
+  var DEFAULT_CRITERIA = ["Рисовка", "Сюжет", "Персонажи", "Темп/Ритм", "Атмосфера"];
 
   var STATUSES = [
     { id: "reading", label: "Читаю", color: "#22D3EE" },
@@ -52,7 +52,7 @@
     "Рисовка": "Лучшая рисовка",
     "Сюжет": "Лучший сюжет",
     "Персонажи": "Лучшие персонажи",
-    "Динамика": "Лучшая динамика",
+    "Темп/Ритм": "Лучший темп",
     "Атмосфера": "Лучшая атмосфера"
   };
 
@@ -63,6 +63,25 @@
 
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
+    {
+      version: "36",
+      type: "update",
+      title: "У каждого критерия свой вес",
+      items: [
+        "Формула теперь взвешенная: Сюжет 35% — Рисовка 28% — Темп/Ритм 22% — Персонажи 15%, всё умножается на Атмосферу",
+        "Максимум по-прежнему ровно 100 — веса подобраны так, чтобы это не сломать",
+        "Процент веса каждого критерия виден прямо рядом с названием на карточке манхвы"
+      ]
+    },
+    {
+      version: "35",
+      type: "update",
+      title: "«Динамика» переименована в «Темп/Ритм»",
+      items: [
+        "Более понятное название того же критерия — суть и формула не изменились",
+        "У всех уже добавленных тайтлов название переименовалось автоматически, включая уже выбранные награды за эту номинацию"
+      ]
+    },
     {
       version: "34",
       type: "update",
@@ -445,9 +464,18 @@
     return div.innerHTML;
   }
 
-  // Scoring formula: (Рисовка + Сюжет + Персонажи + Динамика) × 0.25 × Атмосфера.
-  // Max: 40 × 0.25 × 10 = 100 exactly.
+  // Scoring formula: weighted sum of the 4 base criteria (weights sum to 1,
+  // so the weighted sum stays on the same 1–10 scale as the inputs), then
+  // multiplied by Атмосфера. Max: 10 × 10 = 100 exactly.
+  //   Сюжет 35% — Рисовка 28% — Темп/Ритм 22% — Персонажи 15%
   // Custom (non-default) criteria don't factor into this — they're informational only.
+  var CRITERION_WEIGHTS = { "Сюжет": 0.35, "Рисовка": 0.28, "Темп/Ритм": 0.22, "Персонажи": 0.15 };
+
+  function weightTag(name) {
+    var w = CRITERION_WEIGHTS[name];
+    return w ? '<span class="mt-weight-tag">' + Math.round(w * 100) + "%</span>" : "";
+  }
+
   function average(criteria) {
     if (!criteria.length) return null;
     var find = function (name) {
@@ -457,7 +485,7 @@
     var art = find("Рисовка");
     var plot = find("Сюжет");
     var chars = find("Персонажи");
-    var dynamics = find("Динамика");
+    var dynamics = find("Темп/Ритм");
     var atmosphereRaw = find("Атмосфера");
 
     // Fall back to a plain average if this isn't a "standard" rated title
@@ -468,9 +496,13 @@
       return sum / criteria.length;
     }
 
-    var baseSum = (art || 0) + (plot || 0) + (chars || 0) + (dynamics || 0);
+    var weightedSum =
+      (plot || 0) * CRITERION_WEIGHTS["Сюжет"] +
+      (art || 0) * CRITERION_WEIGHTS["Рисовка"] +
+      (dynamics || 0) * CRITERION_WEIGHTS["Темп/Ритм"] +
+      (chars || 0) * CRITERION_WEIGHTS["Персонажи"];
     var atmosphere = atmosphereRaw === null ? 1 : atmosphereRaw;
-    return baseSum * 0.25 * atmosphere;
+    return weightedSum * atmosphere;
   }
 
   function scoreColor(v) {
@@ -737,6 +769,21 @@
       state.awardEditUsed = {};
     }
 
+    // Carry the "Динамика" → "Темп/Ритм" rename over into already-saved award
+    // picks so old choices for that category keep working under the new key.
+    var awardsMigrated = false;
+    [state.awardWinners, state.awardCandidates].forEach(function (byMonth) {
+      Object.keys(byMonth).forEach(function (monthKey) {
+        var byCategory = byMonth[monthKey];
+        if (byCategory && byCategory["Динамика"] !== undefined && byCategory["Темп/Ритм"] === undefined) {
+          byCategory["Темп/Ритм"] = byCategory["Динамика"];
+          delete byCategory["Динамика"];
+          awardsMigrated = true;
+        }
+      });
+    });
+    if (awardsMigrated) saveAwards();
+
     // One-time migration: titles imported with non-standard ids (e.g. bulk backups
     // like "m1", "m2"...) can't have their add-date recovered from the id tail,
     // which silently excluded them from awards forever. Back-date them to the
@@ -759,6 +806,14 @@
         m.rated = true;
         migrated = true;
       }
+      // "Динамика" was renamed to "Темп/Ритм" — carry the rename over to
+      // criteria already saved under the old name so the formula/labels stay in sync.
+      (m.criteria || []).forEach(function (c) {
+        if (c.name === "Динамика") {
+          c.name = "Темп/Ритм";
+          migrated = true;
+        }
+      });
     });
     if (migrated) save();
   }
@@ -1544,7 +1599,7 @@
         html +=
           '<div class="mt-crit-row" data-crit-id="' + c.id + '">' +
           '<div class="mt-crit-top">' +
-          '<span class="mt-crit-name">' + escapeHtml(c.name) + "</span>" +
+          '<span class="mt-crit-name">' + escapeHtml(c.name) + "</span>" + weightTag(c.name) +
           '<div class="mt-crit-right">' +
           '<span class="mt-crit-score" data-score-label="' + c.id + '" style="color:' + color + '">' +
           c.score.toFixed(1) + "</span>" +
@@ -1558,7 +1613,7 @@
       m.criteria.forEach(function (c) {
         var color = criterionColor(c.score);
         html +=
-          '<div class="mt-bar-row"><span class="mt-bar-name">' + escapeHtml(c.name) + "</span>" +
+          '<div class="mt-bar-row"><span class="mt-bar-name">' + escapeHtml(c.name) + "</span>" + weightTag(c.name) +
           '<div class="mt-bar-track"><div class="mt-bar-fill" style="width:' + (c.score / 10) * 100 +
           "%;background:" + color + ';"></div></div>' +
           '<span class="mt-bar-value" style="color:' + color + '">' + c.score.toFixed(1) + "</span></div>";
@@ -1849,7 +1904,7 @@
     if (agg.length > 0) {
       var bars = agg.slice().sort(function (a, b) { return b.score - a.score; }).map(function (c) {
         return (
-          '<div class="mt-bar-row"><span class="mt-bar-name">' + escapeHtml(c.name) + "</span>" +
+          '<div class="mt-bar-row"><span class="mt-bar-name">' + escapeHtml(c.name) + "</span>" + weightTag(c.name) +
           '<div class="mt-bar-track"><div class="mt-bar-fill" style="width:' + (c.score / 10) * 100 +
           '%;background:#FFB238;"></div></div>' +
           '<span class="mt-bar-value" style="color:#FFB238">' + c.score.toFixed(1) + "</span></div>"
