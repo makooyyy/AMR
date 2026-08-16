@@ -64,6 +64,16 @@
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
     {
+      version: "37",
+      type: "feature",
+      title: "Копирование оценок текстом",
+      items: [
+        "На странице манхвы — кнопка «📋 Копировать оценки»",
+        "В буфер обмена копируется название, итоговая оценка, разбивка по критериям и теги",
+        "Работает и в вебе, и в Android-приложении (с запасным способом на случай, если основной недоступен)"
+      ]
+    },
+    {
       version: "36",
       type: "update",
       title: "У каждого критерия свой вес",
@@ -474,6 +484,24 @@
   function weightTag(name) {
     var w = CRITERION_WEIGHTS[name];
     return w ? '<span class="mt-weight-tag">' + Math.round(w * 100) + "%</span>" : "";
+  }
+
+  function buildScoreText(m) {
+    var avg = average(m.criteria);
+    var lines = [];
+    lines.push(m.title);
+    lines.push("Итоговая оценка: " + (avg === null ? "—" : Math.round(avg)) + "/100");
+    lines.push("");
+    m.criteria.forEach(function (c) {
+      var w = CRITERION_WEIGHTS[c.name];
+      var suffix = c.name === "Атмосфера" ? " (множитель)" : (w ? " (вес " + Math.round(w * 100) + "%)" : "");
+      lines.push(c.name + ": " + c.score.toFixed(1) + suffix);
+    });
+    if (m.tags && m.tags.length) {
+      lines.push("");
+      lines.push("Теги: " + m.tags.join(", "));
+    }
+    return lines.join("\n");
   }
 
   function average(criteria) {
@@ -1622,6 +1650,9 @@
 
     html += "</div>";
 
+    html += '<button class="mt-ghost-btn" id="copy-scores-btn" data-manhwa-id="' + m.id +
+      '" style="width:100%">📋 Копировать оценки</button>';
+
     if (editable) {
       if (state.addingCriterion) {
         html +=
@@ -2400,6 +2431,47 @@
     });
 
     // alternative titles
+    var copyScoresBtn = document.getElementById("copy-scores-btn");
+    if (copyScoresBtn) copyScoresBtn.addEventListener("click", function () {
+      var id = copyScoresBtn.getAttribute("data-manhwa-id");
+      var m = findManhwa(id);
+      if (!m) return;
+      var text = buildScoreText(m);
+
+      function showCopied() {
+        var original = copyScoresBtn.textContent;
+        copyScoresBtn.textContent = "✓ Скопировано";
+        setTimeout(function () {
+          copyScoresBtn.textContent = original;
+        }, 1800);
+      }
+
+      function fallbackCopy() {
+        try {
+          var ta = document.createElement("textarea");
+          ta.value = text;
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          var ok = document.execCommand("copy");
+          document.body.removeChild(ta);
+          if (ok) showCopied();
+          else state.error = "Не удалось скопировать — выдели и скопируй текст вручную.";
+        } catch (e) {
+          state.error = "Не удалось скопировать — выдели и скопируй текст вручную.";
+        }
+        if (state.error) render();
+      }
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(showCopied, fallbackCopy);
+      } else {
+        fallbackCopy();
+      }
+    });
+
     var finishBtn = document.getElementById("finish-rating-btn");
     if (finishBtn) finishBtn.addEventListener("click", function () {
       var id = finishBtn.getAttribute("data-manhwa-id");
