@@ -49,6 +49,7 @@
 
   var AWARD_LABELS = {
     overall: "Тайтл месяца",
+    worst: "Худший тайтл месяца",
     "Рисовка": "Лучшая рисовка",
     "Сюжет": "Лучший сюжет",
     "Персонажи": "Лучшие персонажи",
@@ -63,6 +64,16 @@
 
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
+    {
+      version: "38",
+      type: "feature",
+      title: "Кандидат в премию — прямо со страницы тайтла",
+      items: [
+        "На странице манхвы появилась панель «Кандидат в премию» — можно сразу отметить нужные номинации, не заходя во вкладку «Премия»",
+        "Показываются только ещё не решённые номинации того месяца, к которому относится тайтл",
+        "Новая номинация «Худший тайтл месяца» — присуждается тайтлу с самой низкой итоговой оценкой"
+      ]
+    },
     {
       version: "37",
       type: "feature",
@@ -580,7 +591,13 @@
     return MONTH_NAMES_GENITIVE[idx] + " " + parts[0];
   }
 
-  var AWARD_CATEGORY_KEYS = ["overall"].concat(DEFAULT_CRITERIA);
+  var AWARD_CATEGORY_KEYS = ["overall", "worst"].concat(DEFAULT_CRITERIA);
+
+  // "overall" and "worst" are both scored on the 0-100 average scale;
+  // per-criterion categories use the raw 1-10 criterion score.
+  function isOverallScaleCategory(ck) {
+    return ck === "overall" || ck === "worst";
+  }
 
   function eligibleForMonth(monthKey) {
     return state.manhwas.filter(function (m) {
@@ -596,7 +613,7 @@
     var eligible = eligibleForMonth(monthKey);
     var scored = [];
     eligible.forEach(function (m) {
-      if (categoryKey === "overall") {
+      if (categoryKey === "overall" || categoryKey === "worst") {
         var avg = average(m.criteria);
         if (avg !== null) scored.push({ manhwa: m, score: avg });
       } else {
@@ -604,7 +621,8 @@
         if (c) scored.push({ manhwa: m, score: c.score });
       }
     });
-    scored.sort(function (a, b) { return b.score - a.score; });
+    // "Худший тайтл месяца" ranks lowest score first — everything else best-first.
+    scored.sort(function (a, b) { return categoryKey === "worst" ? a.score - b.score : b.score - a.score; });
     return scored;
   }
 
@@ -1267,8 +1285,8 @@
           '" data-month="' + monthKey + '" data-category="' + escapeHtml(ck) + '">' +
           '<span class="mt-nominee-checkbox">' + (checked ? "☑" : "☐") + "</span>" +
           '<div class="mt-nominee-info"><div class="mt-nominee-title">' + escapeHtml(p.manhwa.title) + "</div></div>" +
-          '<span class="mt-nominee-score" style="color:' + (ck === "overall" ? scoreColor(p.score) : criterionColor(p.score)) + '">' +
-          (ck === "overall" ? Math.round(p.score) : p.score.toFixed(1)) + "</span>" +
+          '<span class="mt-nominee-score" style="color:' + (isOverallScaleCategory(ck) ? scoreColor(p.score) : criterionColor(p.score)) + '">' +
+          (isOverallScaleCategory(ck) ? Math.round(p.score) : p.score.toFixed(1)) + "</span>" +
           "</div>"
         );
       }).join("");
@@ -1293,8 +1311,8 @@
           '<span class="mt-nominee-trophy">' + (confirming ? "🏆" : "") + "</span>" +
           '<div class="mt-nominee-info"><div class="mt-nominee-title">' + escapeHtml(c.manhwa.title) + "</div>" +
           (confirming ? '<div class="mt-nominee-confirm">Точно этот? Нажми ещё раз</div>' : "") + "</div>" +
-          '<span class="mt-nominee-score" style="color:' + (ck === "overall" ? scoreColor(c.score) : criterionColor(c.score)) + '">' +
-          (ck === "overall" ? Math.round(c.score) : c.score.toFixed(1)) + "</span>" +
+          '<span class="mt-nominee-score" style="color:' + (isOverallScaleCategory(ck) ? scoreColor(c.score) : criterionColor(c.score)) + '">' +
+          (isOverallScaleCategory(ck) ? Math.round(c.score) : c.score.toFixed(1)) + "</span>" +
           "</div>"
         );
       }).join("");
@@ -1788,6 +1806,42 @@
     );
   }
 
+  // Lets a title be nominated straight from its own page: toggles it in/out of
+  // the candidate shortlist for whichever category, for the month it belongs to.
+  // Categories whose winner is already decided are left out — nothing to toggle.
+  function renderCandidatePanel(m) {
+    if (!m.rated) return "";
+    var ts = getCreatedAt(m);
+    if (ts === null) return "";
+    var monthKey = monthKeyOf(ts);
+
+    var openCategories = AWARD_CATEGORY_KEYS.filter(function (ck) {
+      if (getWinner(monthKey, ck)) return false;
+      if (isOverallScaleCategory(ck)) return average(m.criteria) !== null;
+      return m.criteria.some(function (c) { return c.name === ck; });
+    });
+    if (!openCategories.length) return "";
+
+    var rows = openCategories.map(function (ck) {
+      var checked = getCandidateIds(monthKey, ck).indexOf(m.id) !== -1;
+      return (
+        '<div class="mt-nominee-row' + (checked ? " picked" : "") + '" data-toggle-candidate="' + m.id +
+        '" data-month="' + monthKey + '" data-category="' + escapeHtml(ck) + '">' +
+        '<span class="mt-nominee-checkbox">' + (checked ? "☑" : "☐") + "</span>" +
+        '<div class="mt-nominee-info"><div class="mt-nominee-title">' + escapeHtml(AWARD_LABELS[ck] || ck) + "</div></div>" +
+        "</div>"
+      );
+    }).join("");
+
+    return (
+      '<div class="mt-paper mt-award-panel">' +
+      '<div class="mt-panel-title">🏆 Кандидат в премию — ' + escapeHtml(monthLabel(monthKey)) + "</div>" +
+      '<div class="mt-ceremony-hint">Отметь номинации месяца, в которых участвует этот тайтл</div>' +
+      rows +
+      "</div>"
+    );
+  }
+
   function renderDetail(m) {
     var avg = average(m.criteria);
     var isNew = m.rated === false;
@@ -1831,6 +1885,8 @@
         }).join("") +
         "</div>";
     }
+
+    html += renderCandidatePanel(m);
 
     html += renderRatingSection(m, avg, editable);
 
