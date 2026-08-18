@@ -284,6 +284,7 @@ body {
   padding: 11px 14px; color: var(--text-primary); font-size: 14px; font-weight: 600;
   font-family: 'Manrope', sans-serif; cursor: pointer;
 }
+.mt-candidate-toggle-active { border-color: rgba(255,178,56,0.5); color: var(--amber); background: rgba(255,178,56,0.08); }
 
 .mt-error {
   margin: 0 16px 8px; padding: 9px 12px; background: rgba(255,92,119,0.12);

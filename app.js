@@ -65,6 +65,25 @@
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
     {
+      version: "40",
+      type: "update",
+      title: "Кандидат в премию — компактнее",
+      items: [
+        "На странице тайтла список номинаций спрятан за одну кнопку под обложкой",
+        "На кнопке сразу видно, сколько номинаций уже отмечено (например «2/3»), не открывая список"
+      ]
+    },
+    {
+      version: "39",
+      type: "fix",
+      title: "Бэкап, антипремия и повторы",
+      items: [
+        "Экспорт/импорт теперь сохраняет и восстанавливает награды (победителей, кандидатов, использованные правки), а не только список тайтлов — старые файлы бэкапа по-прежнему читаются, просто без наград",
+        "«Худший тайтл месяца» больше не даёт золотую рамку обложке и не считается победой при подсчёте «Тайтла года» — у него своя иконка 🗑️ вместо кубка",
+        "При добавлении тайтла с уже существующим названием — предупреждение с подтверждением, чтобы не задвоить случайно"
+      ]
+    },
+    {
       version: "38",
       type: "feature",
       title: "Кандидат в премию — прямо со страницы тайтла",
@@ -470,6 +489,7 @@
     confirmDeleteId: null,
     confirmWinnerPick: null,
     awardsCandidatesConfirmed: false,
+    candidatePanelOpen: false,
     unlockedIds: {},
     error: null
   };
@@ -704,6 +724,16 @@
     return result;
   }
 
+  // "Худший тайтл месяца" is an anti-award — it shouldn't count as a real win
+  // for the golden-cover treatment, the year-champion tally, or the trophy icon.
+  function positiveAwardsForManhwa(m) {
+    return awardsForManhwa(m).filter(function (a) { return a.categoryKey !== "worst"; });
+  }
+
+  function awardIcon(categoryKey) {
+    return categoryKey === "worst" ? "🗑️" : "🏆";
+  }
+
   function yearsWithData() {
     var years = {};
     state.manhwas.forEach(function (m) {
@@ -728,6 +758,7 @@
       if (parseInt(monthKey.split("-")[0], 10) !== year) return;
       var picks = state.awardWinners[monthKey];
       Object.keys(picks).forEach(function (ck) {
+        if (ck === "worst") return; // anti-award doesn't count toward "title of the year"
         var mid = picks[ck];
         counts[mid] = (counts[mid] || 0) + 1;
       });
@@ -780,6 +811,14 @@
 
   function findManhwa(id) {
     for (var i = 0; i < state.manhwas.length; i++) if (state.manhwas[i].id === id) return state.manhwas[i];
+    return null;
+  }
+
+  function findManhwaByTitle(title) {
+    var norm = title.trim().toLowerCase();
+    for (var i = 0; i < state.manhwas.length; i++) {
+      if (state.manhwas[i].title.trim().toLowerCase() === norm) return state.manhwas[i];
+    }
     return null;
   }
 
@@ -1163,7 +1202,7 @@
       '<div class="mt-winner-card" data-open-id="' + w.id + '">' +
       '<div class="mt-winner-cover' + (w.coverUrl ? "" : " mt-winner-cover-empty") + '" style="' + coverStyle + '">' +
       (w.coverUrl ? "" : '<span class="mt-winner-cover-fallback">' + escapeHtml((w.title[0] || "?").toUpperCase()) + "</span>") +
-      '<span class="mt-winner-trophy-badge">🏆</span>' +
+      '<span class="mt-winner-trophy-badge">' + awardIcon(ck) + "</span>" +
       "</div>" +
       '<div class="mt-winner-category">' + escapeHtml(AWARD_LABELS[ck] || ck) + "</div>" +
       '<div class="mt-winner-title">' + escapeHtml(w.title) + "</div>" +
@@ -1253,7 +1292,7 @@
       var decided = !!getWinner(monthKey, ck);
       return (
         '<button class="mt-category-chip' + (active ? " active" : "") + '" data-award-category="' + escapeHtml(ck) + '">' +
-        (decided ? "🏆 " : "") + escapeHtml(AWARD_LABELS[ck] || ck) +
+        (decided ? awardIcon(ck) + " " : "") + escapeHtml(AWARD_LABELS[ck] || ck) +
         "</button>"
       );
     }).join("");
@@ -1271,7 +1310,7 @@
         '<div class="mt-paper mt-award-panel">' +
         '<div class="mt-panel-title">' + escapeHtml(AWARD_LABELS[ck] || ck) + "</div>" +
         '<div class="mt-award-row" data-open-id="' + winner.id + '">' +
-        '<span class="mt-award-trophy">🏆</span>' +
+        '<span class="mt-award-trophy">' + awardIcon(ck) + "</span>" +
         '<div class="mt-award-info"><div class="mt-award-title">' + escapeHtml(winner.title) + "</div>" +
         '<div class="mt-award-sub">Победитель выбран — изменить нельзя</div></div>' +
         "</div></div>";
@@ -1308,7 +1347,7 @@
         return (
           '<div class="mt-nominee-row' + (confirming ? " confirming" : "") + '" data-pick-winner="' + c.manhwa.id +
           '" data-month="' + monthKey + '" data-category="' + escapeHtml(ck) + '">' +
-          '<span class="mt-nominee-trophy">' + (confirming ? "🏆" : "") + "</span>" +
+          '<span class="mt-nominee-trophy">' + (confirming ? awardIcon(ck) : "") + "</span>" +
           '<div class="mt-nominee-info"><div class="mt-nominee-title">' + escapeHtml(c.manhwa.title) + "</div>" +
           (confirming ? '<div class="mt-nominee-confirm">Точно этот? Нажми ещё раз</div>' : "") + "</div>" +
           '<span class="mt-nominee-score" style="color:' + (isOverallScaleCategory(ck) ? scoreColor(c.score) : criterionColor(c.score)) + '">' +
@@ -1460,7 +1499,7 @@
         var avg = average(m.criteria);
         var st = statusById(m.status);
         var ty = typeById(m.type || "manhwa");
-        var isWinnerTitle = awardsForManhwa(m).length > 0;
+        var isWinnerTitle = positiveAwardsForManhwa(m).length > 0;
         var coverStyle = m.coverUrl
           ? "background-image:url('" + escapeHtml(m.coverUrl).replace(/'/g, "%27") + "')"
           : "";
@@ -1806,27 +1845,46 @@
     );
   }
 
-  // Lets a title be nominated straight from its own page: toggles it in/out of
-  // the candidate shortlist for whichever category, for the month it belongs to.
-  // Categories whose winner is already decided are left out — nothing to toggle.
-  function renderCandidatePanel(m) {
-    if (!m.rated) return "";
+  // Categories still open for nomination for the month this title belongs to
+  // (winner not yet decided). Returns null if there's nothing to nominate.
+  function openAwardCategoriesFor(m) {
+    if (!m.rated) return null;
     var ts = getCreatedAt(m);
-    if (ts === null) return "";
+    if (ts === null) return null;
     var monthKey = monthKeyOf(ts);
-
-    var openCategories = AWARD_CATEGORY_KEYS.filter(function (ck) {
+    var categories = AWARD_CATEGORY_KEYS.filter(function (ck) {
       if (getWinner(monthKey, ck)) return false;
       if (isOverallScaleCategory(ck)) return average(m.criteria) !== null;
       return m.criteria.some(function (c) { return c.name === ck; });
     });
-    if (!openCategories.length) return "";
+    if (!categories.length) return null;
+    return { monthKey: monthKey, categories: categories };
+  }
 
-    var rows = openCategories.map(function (ck) {
-      var checked = getCandidateIds(monthKey, ck).indexOf(m.id) !== -1;
+  // Compact single button under the cover — expands into the nomination
+  // checklist below only when tapped, instead of always taking up space.
+  function renderCandidateToggle(m, info) {
+    var pickedCount = info.categories.filter(function (ck) {
+      return getCandidateIds(info.monthKey, ck).indexOf(m.id) !== -1;
+    }).length;
+    var open = state.candidatePanelOpen;
+    var label = "🏆 Кандидат в премию" + (pickedCount > 0 ? " (" + pickedCount + "/" + info.categories.length + ")" : "");
+    return (
+      '<button class="mt-ghost-btn' + (pickedCount > 0 ? " mt-candidate-toggle-active" : "") +
+      '" id="candidate-panel-toggle" data-manhwa-id="' + m.id + '" style="width:100%;margin-bottom:10px">' +
+      label + " " + (open ? "▾" : "▸") +
+      "</button>"
+    );
+  }
+
+  // Lets a title be nominated straight from its own page: toggles it in/out of
+  // the candidate shortlist for whichever category, for the month it belongs to.
+  function renderCandidatePanel(m, info) {
+    var rows = info.categories.map(function (ck) {
+      var checked = getCandidateIds(info.monthKey, ck).indexOf(m.id) !== -1;
       return (
         '<div class="mt-nominee-row' + (checked ? " picked" : "") + '" data-toggle-candidate="' + m.id +
-        '" data-month="' + monthKey + '" data-category="' + escapeHtml(ck) + '">' +
+        '" data-month="' + info.monthKey + '" data-category="' + escapeHtml(ck) + '">' +
         '<span class="mt-nominee-checkbox">' + (checked ? "☑" : "☐") + "</span>" +
         '<div class="mt-nominee-info"><div class="mt-nominee-title">' + escapeHtml(AWARD_LABELS[ck] || ck) + "</div></div>" +
         "</div>"
@@ -1835,7 +1893,7 @@
 
     return (
       '<div class="mt-paper mt-award-panel">' +
-      '<div class="mt-panel-title">🏆 Кандидат в премию — ' + escapeHtml(monthLabel(monthKey)) + "</div>" +
+      '<div class="mt-panel-title">🏆 Кандидат в премию — ' + escapeHtml(monthLabel(info.monthKey)) + "</div>" +
       '<div class="mt-ceremony-hint">Отметь номинации месяца, в которых участвует этот тайтл</div>' +
       rows +
       "</div>"
@@ -1861,14 +1919,21 @@
       '<div class="mt-detail-body">';
 
     var wins = awardsForManhwa(m);
+    var hasGoldWin = positiveAwardsForManhwa(m).length > 0;
 
     if (m.coverUrl) {
       var coverUrlSafe = escapeHtml(m.coverUrl).replace(/'/g, "%27");
       html +=
-        '<div class="mt-hero-wrap' + (wins.length > 0 ? " mt-hero-winner" : "") + '">' +
+        '<div class="mt-hero-wrap' + (hasGoldWin ? " mt-hero-winner" : "") + '">' +
         '<div class="mt-hero-bg" style="background-image:url(\'' + coverUrlSafe + "')\"></div>" +
         '<img class="mt-hero-fg" src="' + coverUrlSafe + '" alt="" />' +
         "</div>";
+    }
+
+    var candidateInfo = openAwardCategoriesFor(m);
+    if (candidateInfo) {
+      html += renderCandidateToggle(m, candidateInfo);
+      if (state.candidatePanelOpen) html += renderCandidatePanel(m, candidateInfo);
     }
 
     if (wins.length > 0) {
@@ -1877,7 +1942,7 @@
         wins.map(function (a) {
           return (
             '<div class="mt-award-row">' +
-            '<span class="mt-award-trophy">🏆</span>' +
+            '<span class="mt-award-trophy">' + awardIcon(a.categoryKey) + "</span>" +
             '<div><div class="mt-award-title">' + escapeHtml(AWARD_LABELS[a.categoryKey] || a.categoryKey) + "</div>" +
             '<div class="mt-award-sub">' + escapeHtml(monthLabel(a.monthKey)) + "</div></div>" +
             "</div>"
@@ -1885,8 +1950,6 @@
         }).join("") +
         "</div>";
     }
-
-    html += renderCandidatePanel(m);
 
     html += renderRatingSection(m, avg, editable);
 
@@ -2238,6 +2301,7 @@
     app.querySelectorAll("[data-open-id]").forEach(function (el) {
       el.addEventListener("click", function () {
         state.selectedId = el.getAttribute("data-open-id");
+        state.candidatePanelOpen = false;
         render();
       });
     });
@@ -2333,6 +2397,10 @@
     function submitNewManhwa() {
       var val = titleInput ? titleInput.value.trim() : "";
       if (!val) return;
+      var dupe = findManhwaByTitle(val);
+      if (dupe && !window.confirm("«" + dupe.title + "» уже есть в списке. Всё равно добавить ещё раз?")) {
+        return;
+      }
       var coverVal = coverInputEl ? coverInputEl.value.trim() : "";
       state.manhwas.push(newManhwa(val, state.pendingType, coverVal));
       state.addingManhwa = false;
@@ -2354,6 +2422,7 @@
       state.selectedId = null;
       state.addingCriterion = false;
       state.pendingGenreDraft = "";
+      state.candidatePanelOpen = false;
       render();
     });
 
@@ -2412,6 +2481,12 @@
         toggleCandidate(monthKey, categoryKey, manhwaId);
         render();
       });
+    });
+
+    var candidatePanelToggle = document.getElementById("candidate-panel-toggle");
+    if (candidatePanelToggle) candidatePanelToggle.addEventListener("click", function () {
+      state.candidatePanelOpen = !state.candidatePanelOpen;
+      render();
     });
 
     var editCandidatesBtn = document.getElementById("edit-candidates-btn");
@@ -2700,7 +2775,17 @@
     // export to file
     var exportBtn = document.getElementById("export-btn");
     if (exportBtn) exportBtn.addEventListener("click", function () {
-      var json = JSON.stringify(state.manhwas, null, 2);
+      // Wrapped format (v2) carries award history too — a plain array (old
+      // exports) still imports fine, just without awards, for backward compat.
+      var backup = {
+        format: "am-tracker-backup",
+        version: 2,
+        manhwas: state.manhwas,
+        awardWinners: state.awardWinners,
+        awardCandidates: state.awardCandidates,
+        awardEditUsed: state.awardEditUsed
+      };
+      var json = JSON.stringify(backup, null, 2);
       var date = new Date().toISOString().slice(0, 10);
       var filename = "manhwa-tracker-backup-" + date + ".json";
 
@@ -2741,14 +2826,40 @@
         reader.onload = function () {
           try {
             var parsed = JSON.parse(reader.result);
-            if (!Array.isArray(parsed)) throw new Error("bad format");
-            var replace = state.manhwas.length === 0 ||
-              window.confirm("Заменить текущий список (" + state.manhwas.length +
-                ") данными из файла (" + parsed.length + ")? Текущие оценки будут удалены.");
+            var manhwas, awardWinners, awardCandidates, awardEditUsed, hasAwards;
+
+            if (Array.isArray(parsed)) {
+              // Legacy export (pre-v2) — titles only, no award history in the file.
+              manhwas = parsed;
+              hasAwards = false;
+            } else if (parsed && Array.isArray(parsed.manhwas)) {
+              manhwas = parsed.manhwas;
+              awardWinners = (parsed.awardWinners && typeof parsed.awardWinners === "object") ? parsed.awardWinners : {};
+              awardCandidates = (parsed.awardCandidates && typeof parsed.awardCandidates === "object") ? parsed.awardCandidates : {};
+              awardEditUsed = (parsed.awardEditUsed && typeof parsed.awardEditUsed === "object") ? parsed.awardEditUsed : {};
+              hasAwards = true;
+            } else {
+              throw new Error("bad format");
+            }
+
+            var confirmMsg = "Заменить текущий список (" + state.manhwas.length +
+              ") данными из файла (" + manhwas.length + ")? Текущие оценки" +
+              (hasAwards ? " и награды" : "") + " будут удалены.";
+            if (!hasAwards) {
+              confirmMsg += " В этом файле нет данных о наградах (старый формат бэкапа) — награды останутся как есть.";
+            }
+
+            var replace = state.manhwas.length === 0 || window.confirm(confirmMsg);
             if (replace) {
-              state.manhwas = parsed;
+              state.manhwas = manhwas;
+              if (hasAwards) {
+                state.awardWinners = awardWinners;
+                state.awardCandidates = awardCandidates;
+                state.awardEditUsed = awardEditUsed;
+              }
               state.error = null;
               save();
+              if (hasAwards) saveAwards();
               render();
             }
           } catch (e) {
