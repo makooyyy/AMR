@@ -65,6 +65,15 @@
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
     {
+      version: "41",
+      type: "fix",
+      title: "Победитель премии не сохранялся после удаления тайтла",
+      items: [
+        "Если удалить тайтл, который уже выиграл номинацию (например «Худший тайтл месяца»), приложение больше не считает эту номинацию занятой навсегда — теперь можно выбрать победителя заново",
+        "При удалении тайтла его больше не остаётся «висящим» в списках кандидатов и победителей"
+      ]
+    },
+    {
       version: "40",
       type: "update",
       title: "Кандидат в премию — компактнее",
@@ -691,10 +700,13 @@
     return findManhwa(picks[categoryKey]);
   }
 
-  // Winners are permanent once set — this refuses to overwrite an existing pick.
+  // Winners are permanent once set — this refuses to overwrite an existing
+  // pick, UNLESS that pick points at a manhwa that no longer exists (deleted
+  // after winning) — an orphaned id doesn't count as "decided".
   function setWinner(monthKey, categoryKey, manhwaId) {
     if (!state.awardWinners[monthKey]) state.awardWinners[monthKey] = {};
-    if (state.awardWinners[monthKey][categoryKey]) return false;
+    var existing = state.awardWinners[monthKey][categoryKey];
+    if (existing && findManhwa(existing)) return false;
     state.awardWinners[monthKey][categoryKey] = manhwaId;
     saveAwards();
     return true;
@@ -812,6 +824,27 @@
   function findManhwa(id) {
     for (var i = 0; i < state.manhwas.length; i++) if (state.manhwas[i].id === id) return state.manhwas[i];
     return null;
+  }
+
+  // Called right before a manhwa is actually removed, so a deleted title
+  // can't leave a "phantom" winner slot behind (see setWinner) and doesn't
+  // linger forever in candidate shortlists.
+  function purgeAwardReferences(id) {
+    var changed = false;
+    Object.keys(state.awardWinners).forEach(function (monthKey) {
+      var picks = state.awardWinners[monthKey];
+      Object.keys(picks).forEach(function (ck) {
+        if (picks[ck] === id) { delete picks[ck]; changed = true; }
+      });
+    });
+    Object.keys(state.awardCandidates).forEach(function (monthKey) {
+      var byCategory = state.awardCandidates[monthKey];
+      Object.keys(byCategory).forEach(function (ck) {
+        var idx = byCategory[ck].indexOf(id);
+        if (idx !== -1) { byCategory[ck].splice(idx, 1); changed = true; }
+      });
+    });
+    if (changed) saveAwards();
   }
 
   function findManhwaByTitle(title) {
@@ -2340,6 +2373,7 @@
         e.stopPropagation();
         var id = btn.getAttribute("data-delete-id");
         if (state.confirmDeleteId === id) {
+          purgeAwardReferences(id);
           state.manhwas = state.manhwas.filter(function (m) { return m.id !== id; });
           if (state.selectedId === id) state.selectedId = null;
           state.confirmDeleteId = null;
