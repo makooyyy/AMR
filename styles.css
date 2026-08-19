@@ -680,10 +680,38 @@ input[type="range"].mt-slider::-moz-range-thumb {
 
 .mt-loading { color: var(--text-muted); padding: 40px 16px; text-align: center; }
 
+/* AniList lookup (add-manhwa flow) */
+.mt-anilist-error { color: var(--red); font-size: 12px; font-weight: 600; margin-top: 8px; }
+.mt-anilist-empty { color: var(--text-muted); font-size: 12px; margin-top: 8px; }
+.mt-anilist-applied { color: var(--amber); font-size: 12px; font-weight: 700; margin-top: 8px; }
+.mt-anilist-results { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
+.mt-anilist-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 12px;
+  border: 1.5px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02);
+  cursor: pointer; transition: transform .12s cubic-bezier(.34,1.56,.64,1), border-color .15s ease, background .15s ease;
+}
+.mt-anilist-row:active { transform: scale(0.98); }
+.mt-anilist-row.picked { border-color: var(--amber); background: rgba(255,178,56,0.1); }
+.mt-anilist-cover {
+  width: 38px; height: 52px; flex-shrink: 0; border-radius: 6px; background-size: cover; background-position: center;
+  background-color: rgba(255,255,255,0.06);
+}
+.mt-anilist-cover-empty { display: flex; align-items: center; justify-content: center; }
+.mt-anilist-info { flex: 1; min-width: 0; }
+.mt-anilist-title {
+  font-weight: 700; font-size: 13px; color: var(--text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mt-anilist-meta {
+  font-size: 11px; color: var(--text-muted); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mt-anilist-picked-check { color: var(--amber); font-weight: 800; flex-shrink: 0; }
+
 @media (prefers-reduced-motion: reduce) {
   .mt-btn, .mt-tab-v2, .mt-tab-icon-wrap, .mt-paper, .mt-grid-card, .mt-mini-row,
   .mt-changelog-entry, .mt-stamp, .mt-cover-score, .mt-icon-round, .mt-primary-btn,
-  .mt-filter-chip, .mt-tag-chip, .mt-emotion-star,
+  .mt-filter-chip, .mt-tag-chip, .mt-emotion-star, .mt-anilist-row,
   .mt-reveal-backdrop, .mt-reveal-card, .mt-reveal-cover, .mt-reveal-title, .mt-reveal-stamp, .mt-reveal-notes {
     animation: none !important; transition: none !important;
   }

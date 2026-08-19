@@ -27,6 +27,43 @@
     "Психология", "Спорт", "Меха", "Гарем", "Трагедия"
   ];
 
+  // AniList's genre list comes back in English — translate the common ones so
+  // they read consistently next to the app's Russian genre tags. Anything not
+  // in this dict is used as-is rather than dropped.
+  var ANILIST_GENRE_RU = {
+    "Action": "Экшн",
+    "Adventure": "Приключения",
+    "Comedy": "Комедия",
+    "Drama": "Драма",
+    "Ecchi": "Этти",
+    "Fantasy": "Фэнтези",
+    "Hentai": "Хентай",
+    "Horror": "Ужасы",
+    "Mahou Shoujo": "Махо-сёдзё",
+    "Mecha": "Меха",
+    "Music": "Музыка",
+    "Mystery": "Мистика",
+    "Psychological": "Психология",
+    "Romance": "Романтика",
+    "Sci-Fi": "Фантастика",
+    "Slice of Life": "Повседневность",
+    "Sports": "Спорт",
+    "Supernatural": "Сверхъестественное",
+    "Thriller": "Триллер"
+  };
+  function translateAniListGenre(g) {
+    return ANILIST_GENRE_RU[g] || g;
+  }
+
+  // AniList's countryOfOrigin maps neatly onto the app's manhwa/manga/manhua
+  // type split. Anything else (rare) is left for the user to pick manually.
+  function typeFromCountryOfOrigin(country) {
+    if (country === "KR") return "manhwa";
+    if (country === "JP") return "manga";
+    if (country === "CN" || country === "TW" || country === "HK") return "manhua";
+    return null;
+  }
+
 
   var EMOTION_LABELS = [
     "Пожалел о каждой потраченной минуте",
@@ -64,6 +101,16 @@
 
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
+    {
+      version: "43",
+      type: "feature",
+      title: "Автозаполнение через AniList",
+      items: [
+        "При добавлении тайтла — кнопка «Найти на AniList»: ищет по введённому названию и показывает подходящие варианты с обложкой",
+        "При выборе варианта автоматически подтягиваются обложка, жанры, английское название и тип (манхва/манга/маньхуа определяется по стране происхождения)",
+        "Работает как подсказка — все поля перед добавлением можно поправить руками, а если ничего не найдётся, форма как обычно заполняется вручную"
+      ]
+    },
     {
       version: "42",
       type: "feature",
@@ -502,6 +549,12 @@
     pendingTitleDraft: "",
     pendingCoverDraft: "",
     pendingGenreDraft: "",
+    pendingGenresDraft: [],
+    pendingAltTitlesDraft: null,
+    aniListSearching: false,
+    aniListError: null,
+    aniListResults: null,
+    aniListPickedIndex: null,
     addingCriterion: false,
     confirmClear: false,
     confirmDeleteId: null,
@@ -808,6 +861,42 @@
     return "критериев";
   }
 
+  var ANILIST_QUERY =
+    "query ($search: String) { Page(page: 1, perPage: 6) { media(search: $search, type: MANGA, sort: SEARCH_MATCH) { " +
+    "id title { romaji english native } coverImage { large } genres countryOfOrigin format status } } }";
+
+  // Public AniList GraphQL endpoint — no API key needed, CORS-enabled for
+  // browser use. Fetches a shortlist of matches so the user picks the right
+  // one instead of the app guessing from a single top result.
+  function searchAniList(query) {
+    state.aniListSearching = true;
+    state.aniListError = null;
+    state.aniListResults = null;
+    state.aniListPickedIndex = null;
+    render();
+
+    fetch("https://graphql.anilist.co", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({ query: ANILIST_QUERY, variables: { search: query } })
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        if (data.errors && data.errors.length) throw new Error(data.errors[0].message || "AniList error");
+        state.aniListResults = (data.data && data.data.Page && data.data.Page.media) || [];
+        state.aniListSearching = false;
+        render();
+      })
+      .catch(function () {
+        state.aniListSearching = false;
+        state.aniListError = "Не удалось найти на AniList — проверь соединение с интернетом.";
+        render();
+      });
+  }
+
   function newManhwa(title, type, coverUrl) {
     return {
       id: uid(),
@@ -1081,6 +1170,38 @@
     return (
       '<span class="mt-status-badge mt-status-tag" style="border-color:' + t.color + ";color:" + t.color +
       ";background:" + t.color + '18;">' + t.label + "</span>"
+    );
+  }
+
+  function renderAniListResults() {
+    if (!state.aniListResults.length) {
+      return '<div class="mt-anilist-empty">Ничего не нашлось — можно ввести данные вручную</div>';
+    }
+    var typeLabels = { manhwa: "Манхва", manga: "Манга", manhua: "Маньхуа" };
+    return (
+      '<div class="mt-anilist-results">' +
+      state.aniListResults.map(function (media, i) {
+        var t = (media.title && (media.title.english || media.title.romaji || media.title.native)) || "?";
+        var country = typeFromCountryOfOrigin(media.countryOfOrigin);
+        var meta = typeLabels[country] || media.countryOfOrigin || "";
+        if (media.genres && media.genres.length) {
+          meta += (meta ? " · " : "") + media.genres.slice(0, 3).map(translateAniListGenre).join(", ");
+        }
+        var picked = state.aniListPickedIndex === i;
+        var cover = media.coverImage && media.coverImage.large;
+        var coverStyle = cover ? "background-image:url('" + escapeHtml(cover).replace(/'/g, "%27") + "')" : "";
+        return (
+          '<div class="mt-anilist-row' + (picked ? " picked" : "") + '" data-anilist-pick="' + i + '">' +
+          '<div class="mt-anilist-cover' + (cover ? "" : " mt-anilist-cover-empty") + '" style="' + coverStyle + '"></div>' +
+          '<div class="mt-anilist-info">' +
+          '<div class="mt-anilist-title">' + escapeHtml(t) + "</div>" +
+          '<div class="mt-anilist-meta">' + escapeHtml(meta) + "</div>" +
+          "</div>" +
+          (picked ? '<span class="mt-anilist-picked-check">✓</span>' : "") +
+          "</div>"
+        );
+      }).join("") +
+      "</div>"
     );
   }
 
@@ -1608,10 +1729,21 @@
             "border-color:" + t.color + "55;color:" + t.color) + '">' + t.label + "</button>"
         );
       }).join("");
+      var appliedBits = [];
+      if (state.pendingCoverDraft) appliedBits.push("обложка");
+      if (state.pendingGenresDraft.length) appliedBits.push(state.pendingGenresDraft.length + " жанр(а/ов)");
+      if (state.pendingAltTitlesDraft && state.pendingAltTitlesDraft.en) appliedBits.push("англ. название");
       html +=
         '<div class="mt-paper">' +
         '<input class="mt-input" id="new-title-input" placeholder="Название манхвы" value="' +
         escapeHtml(state.pendingTitleDraft) + '" />' +
+        '<button class="mt-ghost-btn" id="anilist-search-btn" style="width:100%;margin-top:8px"' +
+        (state.aniListSearching ? " disabled" : "") + ">" +
+        (state.aniListSearching ? "Ищу на AniList…" : "🔎 Найти на AniList") +
+        "</button>" +
+        (state.aniListError ? '<div class="mt-anilist-error">' + escapeHtml(state.aniListError) + "</div>" : "") +
+        (state.aniListResults ? renderAniListResults() : "") +
+        (appliedBits.length ? '<div class="mt-anilist-applied">✓ Подтянуто с AniList: ' + escapeHtml(appliedBits.join(", ")) + "</div>" : "") +
         '<input class="mt-input" id="new-cover-input" placeholder="Ссылка на обложку (необязательно)" ' +
         'style="margin-top:8px" value="' + escapeHtml(state.pendingCoverDraft) + '" />' +
         '<div class="mt-type-row">' + typeBtns + "</div>" +
@@ -2444,6 +2576,12 @@
       state.pendingType = "manhwa";
       state.pendingTitleDraft = "";
       state.pendingCoverDraft = "";
+      state.pendingGenresDraft = [];
+      state.pendingAltTitlesDraft = null;
+      state.aniListSearching = false;
+      state.aniListError = null;
+      state.aniListResults = null;
+      state.aniListPickedIndex = null;
       render();
       var inp = document.getElementById("new-title-input");
       if (inp) inp.focus();
@@ -2454,7 +2592,44 @@
       state.addingManhwa = false;
       state.pendingTitleDraft = "";
       state.pendingCoverDraft = "";
+      state.pendingGenresDraft = [];
+      state.pendingAltTitlesDraft = null;
+      state.aniListSearching = false;
+      state.aniListError = null;
+      state.aniListResults = null;
+      state.aniListPickedIndex = null;
       render();
+    });
+
+    var anilistSearchBtn = document.getElementById("anilist-search-btn");
+    if (anilistSearchBtn) anilistSearchBtn.addEventListener("click", function () {
+      var draftInput = document.getElementById("new-title-input");
+      var q = draftInput ? draftInput.value.trim() : "";
+      state.pendingTitleDraft = draftInput ? draftInput.value : "";
+      if (!q) return;
+      searchAniList(q);
+    });
+
+    app.querySelectorAll("[data-anilist-pick]").forEach(function (row) {
+      row.addEventListener("click", function () {
+        var i = parseInt(row.getAttribute("data-anilist-pick"), 10);
+        var media = state.aniListResults && state.aniListResults[i];
+        if (!media) return;
+        state.aniListPickedIndex = i;
+        state.pendingCoverDraft = (media.coverImage && media.coverImage.large) || "";
+        var mappedType = typeFromCountryOfOrigin(media.countryOfOrigin);
+        if (mappedType) state.pendingType = mappedType;
+        state.pendingGenresDraft = (media.genres || []).map(translateAniListGenre);
+        var altTitles = { en: "", ja: "", ru: "" };
+        if (media.title && media.title.english) altTitles.en = media.title.english;
+        // The "ja" field means specifically a Japanese title — only fill it for
+        // manga (JP origin), never for manhwa/manhua where native != Japanese.
+        if (mappedType === "manga" && media.title && media.title.native) altTitles.ja = media.title.native;
+        state.pendingAltTitlesDraft = altTitles;
+        render();
+        var inp = document.getElementById("new-title-input");
+        if (inp) inp.focus();
+      });
     });
 
     app.querySelectorAll("[data-pick-type]").forEach(function (btn) {
@@ -2481,11 +2656,23 @@
         return;
       }
       var coverVal = coverInputEl ? coverInputEl.value.trim() : "";
-      state.manhwas.push(newManhwa(val, state.pendingType, coverVal));
+      var m = newManhwa(val, state.pendingType, coverVal);
+      if (state.pendingGenresDraft.length) m.genres = state.pendingGenresDraft.slice();
+      if (state.pendingAltTitlesDraft) {
+        m.altTitles.en = state.pendingAltTitlesDraft.en || "";
+        m.altTitles.ja = state.pendingAltTitlesDraft.ja || "";
+      }
+      state.manhwas.push(m);
       state.addingManhwa = false;
       state.pendingTitleDraft = "";
       state.pendingCoverDraft = "";
       state.pendingType = "manhwa";
+      state.pendingGenresDraft = [];
+      state.pendingAltTitlesDraft = null;
+      state.aniListSearching = false;
+      state.aniListError = null;
+      state.aniListResults = null;
+      state.aniListPickedIndex = null;
       save();
       render();
     }
