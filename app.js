@@ -102,6 +102,16 @@
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
     {
+      version: "45",
+      type: "feature",
+      title: "Корейское название манхвы",
+      items: [
+        "На карточке тайтла добавилось поле «Корейское название» — по аналогии с японским для манги",
+        "При выборе манхвы через поиск на AniList корейское название (родная запись) подтягивается автоматически",
+        "Поиск по библиотеке теперь учитывает и его тоже"
+      ]
+    },
+    {
       version: "44",
       type: "fix",
       title: "AniList: видно настоящую причину ошибки",
@@ -933,7 +943,7 @@
       tags: [],
       coverUrl: coverUrl || "",
       genres: [],
-      altTitles: { en: "", ja: "", ru: "" },
+      altTitles: { en: "", ja: "", ko: "", ru: "" },
       criteria: DEFAULT_CRITERIA.map(function (name) {
         return { id: uid(), name: name, score: 5 };
       })
@@ -1754,6 +1764,8 @@
       if (state.pendingCoverDraft) appliedBits.push("обложка");
       if (state.pendingGenresDraft.length) appliedBits.push(state.pendingGenresDraft.length + " жанр(а/ов)");
       if (state.pendingAltTitlesDraft && state.pendingAltTitlesDraft.en) appliedBits.push("англ. название");
+      if (state.pendingAltTitlesDraft && state.pendingAltTitlesDraft.ko) appliedBits.push("кор. название");
+      if (state.pendingAltTitlesDraft && state.pendingAltTitlesDraft.ja) appliedBits.push("яп. название");
       html +=
         '<div class="mt-paper">' +
         '<input class="mt-input" id="new-title-input" placeholder="Название манхвы" value="' +
@@ -1782,10 +1794,11 @@
 
   /* ---------- view: detail ---------- */
   function renderAltTitlesPanel(m) {
-    var alt = m.altTitles || { en: "", ja: "", ru: "" };
+    var alt = m.altTitles || { en: "", ja: "", ko: "", ru: "" };
     var fields = [
       ["en", "EN", "Английское название"],
       ["ja", "JP", "Японское название"],
+      ["ko", "KR", "Корейское название"],
       ["ru", "RU", "Русское название"]
     ];
     var rows = fields.map(function (f) {
@@ -2028,7 +2041,7 @@
   function renderAltTitlesReadOnly(m) {
     var alt = m.altTitles || {};
     var fields = [
-      ["en", "EN"], ["ja", "JP"], ["ru", "RU"]
+      ["en", "EN"], ["ja", "JP"], ["ko", "KR"], ["ru", "RU"]
     ];
     var rows = fields
       .filter(function (f) { return alt[f[0]] && alt[f[0]].trim(); })
@@ -2641,11 +2654,12 @@
         var mappedType = typeFromCountryOfOrigin(media.countryOfOrigin);
         if (mappedType) state.pendingType = mappedType;
         state.pendingGenresDraft = (media.genres || []).map(translateAniListGenre);
-        var altTitles = { en: "", ja: "", ru: "" };
+        var altTitles = { en: "", ja: "", ko: "", ru: "" };
         if (media.title && media.title.english) altTitles.en = media.title.english;
-        // The "ja" field means specifically a Japanese title — only fill it for
-        // manga (JP origin), never for manhwa/manhua where native != Japanese.
+        // Native title only means something in its own script — only fill "ja"
+        // for manga (JP origin) and "ko" for manhwa (KR origin), never cross them.
         if (mappedType === "manga" && media.title && media.title.native) altTitles.ja = media.title.native;
+        if (mappedType === "manhwa" && media.title && media.title.native) altTitles.ko = media.title.native;
         state.pendingAltTitlesDraft = altTitles;
         render();
         var inp = document.getElementById("new-title-input");
@@ -2682,6 +2696,7 @@
       if (state.pendingAltTitlesDraft) {
         m.altTitles.en = state.pendingAltTitlesDraft.en || "";
         m.altTitles.ja = state.pendingAltTitlesDraft.ja || "";
+        m.altTitles.ko = state.pendingAltTitlesDraft.ko || "";
       }
       state.manhwas.push(m);
       state.addingManhwa = false;
@@ -2944,7 +2959,7 @@
       var lang = input.getAttribute("data-alt-lang");
       input.addEventListener("input", function () {
         if (!selected) return;
-        if (!selected.altTitles) selected.altTitles = { en: "", ja: "", ru: "" };
+        if (!selected.altTitles) selected.altTitles = { en: "", ja: "", ko: "", ru: "" };
         selected.altTitles[lang] = input.value;
       });
       input.addEventListener("blur", function () {
