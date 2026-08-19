@@ -102,6 +102,15 @@
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
     {
+      version: "44",
+      type: "fix",
+      title: "AniList: видно настоящую причину ошибки",
+      items: [
+        "Если поиск на AniList не срабатывает (лимит запросов, сбой API, сеть), теперь показывается реальная причина вместо общего «ничего не нашлось»",
+        "Подсказка при пустом результате: AniList распознаёт в основном английские/ромадзи названия, а не переводы фан-групп"
+      ]
+    },
+    {
       version: "43",
       type: "feature",
       title: "Автозаполнение через AniList",
@@ -862,12 +871,14 @@
   }
 
   var ANILIST_QUERY =
-    "query ($search: String) { Page(page: 1, perPage: 6) { media(search: $search, type: MANGA, sort: SEARCH_MATCH) { " +
+    "query ($search: String) { Page(page: 1, perPage: 8) { pageInfo { total } media(search: $search, type: MANGA, sort: SEARCH_MATCH) { " +
     "id title { romaji english native } coverImage { large } genres countryOfOrigin format status } } }";
 
   // Public AniList GraphQL endpoint — no API key needed, CORS-enabled for
   // browser use. Fetches a shortlist of matches so the user picks the right
   // one instead of the app guessing from a single top result.
+  // "type: MANGA" already covers manhwa/manhua too — AniList only splits
+  // ANIME vs MANGA; manhwa/manhua are told apart by countryOfOrigin, not type.
   function searchAniList(query) {
     state.aniListSearching = true;
     state.aniListError = null;
@@ -881,18 +892,28 @@
       body: JSON.stringify({ query: ANILIST_QUERY, variables: { search: query } })
     })
       .then(function (res) {
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        return res.json();
+        return res.json()
+          .catch(function () { return null; })
+          .then(function (data) {
+            if (!res.ok) {
+              var apiMsg = data && data.errors && data.errors[0] && data.errors[0].message;
+              throw new Error(apiMsg || ("AniList вернул ошибку " + res.status));
+            }
+            return data;
+          });
       })
       .then(function (data) {
-        if (data.errors && data.errors.length) throw new Error(data.errors[0].message || "AniList error");
-        state.aniListResults = (data.data && data.data.Page && data.data.Page.media) || [];
+        if (!data) throw new Error("AniList прислал пустой/некорректный ответ");
+        if (data.errors && data.errors.length) throw new Error(data.errors[0].message || "ошибка AniList");
+        var page = data.data && data.data.Page;
+        state.aniListResults = (page && page.media) || [];
         state.aniListSearching = false;
         render();
       })
-      .catch(function () {
+      .catch(function (err) {
+        console.error("AniList search failed:", err);
         state.aniListSearching = false;
-        state.aniListError = "Не удалось найти на AniList — проверь соединение с интернетом.";
+        state.aniListError = (err && err.message) ? err.message : "Не удалось найти на AniList — проверь соединение с интернетом.";
         render();
       });
   }
@@ -1175,7 +1196,7 @@
 
   function renderAniListResults() {
     if (!state.aniListResults.length) {
-      return '<div class="mt-anilist-empty">Ничего не нашлось — можно ввести данные вручную</div>';
+      return '<div class="mt-anilist-empty">Ничего не нашлось. AniList индексирует в основном английские/ромадзи названия — попробуй оригинальное название вместо русского перевода, либо впиши данные вручную</div>';
     }
     var typeLabels = { manhwa: "Манхва", manga: "Манга", manhua: "Маньхуа" };
     return (
