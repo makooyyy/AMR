@@ -65,6 +65,15 @@
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
     {
+      version: "42",
+      type: "feature",
+      title: "Превью кандидатов следующего месяца",
+      items: [
+        "Во вкладке «Премия», под победителями завершённого месяца, теперь показываются кандидаты, уже отмеченные для текущего (ещё не завершённого) месяца",
+        "Список только для просмотра — тап по тайтлу открывает его карточку, отмечать кандидатов по-прежнему нужно со страницы тайтла или во вкладке «Премия» после завершения месяца"
+      ]
+    },
+    {
       version: "41",
       type: "fix",
       title: "Победитель премии не сохранялся после удаления тайтла",
@@ -1243,6 +1252,40 @@
     );
   }
 
+  // Read-only peek at candidates already picked (from title pages or the Awards
+  // tab of a still-open month) for the month currently in progress — shown once
+  // the previous month's winners are all decided, so there's always something
+  // to look forward to.
+  function renderNextMonthCandidatesPreview() {
+    var nextMonthKey = monthKeyOf(Date.now());
+    var groups = AWARD_CATEGORY_KEYS.map(function (ck) {
+      return { ck: ck, entries: candidateEntries(nextMonthKey, ck) };
+    }).filter(function (g) { return g.entries.length > 0; });
+
+    if (!groups.length) return "";
+
+    return (
+      '<div class="mt-winner-section-title" style="margin-top:18px">🔮 КАНДИДАТЫ — ' +
+      escapeHtml(monthLabel(nextMonthKey)).toUpperCase() + "</div>" +
+      groups.map(function (g) {
+        return (
+          '<div class="mt-paper mt-award-panel">' +
+          '<div class="mt-panel-title">' + escapeHtml(AWARD_LABELS[g.ck] || g.ck) + "</div>" +
+          g.entries.map(function (e) {
+            return (
+              '<div class="mt-nominee-row" data-open-id="' + e.manhwa.id + '">' +
+              '<div class="mt-nominee-info"><div class="mt-nominee-title">' + escapeHtml(e.manhwa.title) + "</div></div>" +
+              '<span class="mt-nominee-score" style="color:' + (isOverallScaleCategory(g.ck) ? scoreColor(e.score) : criterionColor(e.score)) + '">' +
+              (isOverallScaleCategory(g.ck) ? Math.round(e.score) : e.score.toFixed(1)) + "</span>" +
+              "</div>"
+            );
+          }).join("") +
+          "</div>"
+        );
+      }).join("")
+    );
+  }
+
   function renderAwardsTab() {
     var monthKey = lastCompletedMonthKey();
     var toggle =
@@ -1297,6 +1340,8 @@
           return winnerCardHtml(ck, getWinner(monthKey, ck));
         }).join("") +
         "</div>";
+
+      html += renderNextMonthCandidatesPreview();
 
       if (canEditWinners(monthKey)) {
         html +=
