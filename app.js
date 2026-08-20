@@ -102,6 +102,23 @@
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
     {
+      version: "47",
+      type: "update",
+      title: "Кнопка добавления тайтла — новый вид",
+      items: [
+        "«Добавить манхву» теперь с градиентом розовый→янтарь, кружком-иконкой и лёгким бликом — вместо простой пунктирной рамки"
+      ]
+    },
+    {
+      version: "46",
+      type: "update",
+      title: "Русское название в списке, кнопка добавления — наверх",
+      items: [
+        "В главном списке тайтлы теперь подписаны русским альтернативным названием (если оно указано), а не оригинальным — сортировка по алфавиту тоже ориентируется на него",
+        "Кнопка «+ Добавить манхву» переехала наверх списка, над всеми тайтлами"
+      ]
+    },
+    {
       version: "45",
       type: "feature",
       title: "Корейское название манхвы",
@@ -1257,6 +1274,13 @@
     return Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; });
   }
 
+  // The library grid shows a title's Russian alt name when set, falling back
+  // to its primary title — used anywhere the "main list" needs a display name.
+  function displayTitle(m) {
+    var ru = m.altTitles && m.altTitles.ru;
+    return (ru && ru.trim()) ? ru : m.title;
+  }
+
   function sortedManhwas() {
     var arr = state.manhwas.slice();
     if (state.filterStatus !== "all") {
@@ -1275,7 +1299,7 @@
         return (bv === null ? -1 : bv) - (av === null ? -1 : av);
       });
     } else if (state.sortMode === "title") {
-      arr.sort(function (a, b) { return a.title.localeCompare(b.title, "ru"); });
+      arr.sort(function (a, b) { return displayTitle(a).localeCompare(displayTitle(b), "ru"); });
     } else if (state.sortMode === "completed") {
       arr.sort(function (a, b) {
         var ac = a.completedAt || 0, bc = b.completedAt || 0;
@@ -1714,43 +1738,6 @@
 
     html += '<div class="mt-list">';
 
-    if (list.length === 0 && !state.addingManhwa) {
-      var noneAtAll = state.manhwas.length === 0;
-      html += noneAtAll
-        ? '<div class="mt-paper mt-empty"><div class="mt-empty-title">Пока пусто</div>' +
-          '<div class="mt-empty-text">Добавь манхву — оценишь рисовку, сюжет, персонажей и всё остальное по отдельности.</div></div>'
-        : '<div class="mt-paper mt-empty"><div class="mt-empty-title">Ничего не найдено</div>' +
-          '<div class="mt-empty-text">Попробуй изменить поиск или фильтр.</div></div>';
-    }
-
-    if (list.length > 0) {
-      html += '<div class="mt-grid">';
-      list.forEach(function (m, gridIdx) {
-        var avg = average(m.criteria);
-        var st = statusById(m.status);
-        var ty = typeById(m.type || "manhwa");
-        var isWinnerTitle = positiveAwardsForManhwa(m).length > 0;
-        var coverStyle = m.coverUrl
-          ? "background-image:url('" + escapeHtml(m.coverUrl).replace(/'/g, "%27") + "')"
-          : "";
-
-        html +=
-          '<div class="mt-grid-card" style="animation-delay:' + Math.min(gridIdx * 30, 240) + 'ms">' +
-          '<div class="mt-cover' + (m.coverUrl ? "" : " mt-cover-empty") + (isWinnerTitle ? " mt-cover-winner" : "") +
-          '" style="' + coverStyle + '" data-open-id="' + m.id + '">' +
-          (m.coverUrl ? "" : '<span class="mt-cover-fallback">' + escapeHtml((m.title[0] || "?").toUpperCase()) + "</span>") +
-          '<span class="mt-cover-status" style="background:' + st.color + '">' + st.label + "</span>" +
-          (isWinnerTitle ? '<span class="mt-cover-trophy">🏆</span>' : "") +
-          '<span class="mt-cover-score" style="border-color:' + scoreColor(avg) + ";color:" + scoreColor(avg) +
-          '">' + (avg === null ? "–" : Math.round(avg)) + "</span>" +
-          "</div>" +
-          '<div class="mt-cover-title" data-open-id="' + m.id + '">' + escapeHtml(m.title) + "</div>" +
-          '<div class="mt-cover-type-line">' + ty.label + "</div>" +
-          "</div>";
-      });
-      html += "</div>";
-    }
-
     if (state.addingManhwa) {
       var typeBtns = TYPES.map(function (t) {
         var active = state.pendingType === t.id;
@@ -1785,7 +1772,45 @@
         '<button class="mt-ghost-btn" id="cancel-add-manhwa">Отмена</button>' +
         "</div></div>";
     } else {
-      html += '<button class="mt-add-btn" id="start-add-manhwa">+ Добавить манхву</button>';
+      html += '<button class="mt-add-btn" id="start-add-manhwa"><span class="mt-add-icon">+</span>Добавить манхву</button>';
+    }
+
+    if (list.length === 0 && !state.addingManhwa) {
+      var noneAtAll = state.manhwas.length === 0;
+      html += noneAtAll
+        ? '<div class="mt-paper mt-empty"><div class="mt-empty-title">Пока пусто</div>' +
+          '<div class="mt-empty-text">Добавь манхву — оценишь рисовку, сюжет, персонажей и всё остальное по отдельности.</div></div>'
+        : '<div class="mt-paper mt-empty"><div class="mt-empty-title">Ничего не найдено</div>' +
+          '<div class="mt-empty-text">Попробуй изменить поиск или фильтр.</div></div>';
+    }
+
+    if (list.length > 0) {
+      html += '<div class="mt-grid">';
+      list.forEach(function (m, gridIdx) {
+        var avg = average(m.criteria);
+        var st = statusById(m.status);
+        var ty = typeById(m.type || "manhwa");
+        var isWinnerTitle = positiveAwardsForManhwa(m).length > 0;
+        var coverStyle = m.coverUrl
+          ? "background-image:url('" + escapeHtml(m.coverUrl).replace(/'/g, "%27") + "')"
+          : "";
+
+        var title = displayTitle(m);
+        html +=
+          '<div class="mt-grid-card" style="animation-delay:' + Math.min(gridIdx * 30, 240) + 'ms">' +
+          '<div class="mt-cover' + (m.coverUrl ? "" : " mt-cover-empty") + (isWinnerTitle ? " mt-cover-winner" : "") +
+          '" style="' + coverStyle + '" data-open-id="' + m.id + '">' +
+          (m.coverUrl ? "" : '<span class="mt-cover-fallback">' + escapeHtml((title[0] || "?").toUpperCase()) + "</span>") +
+          '<span class="mt-cover-status" style="background:' + st.color + '">' + st.label + "</span>" +
+          (isWinnerTitle ? '<span class="mt-cover-trophy">🏆</span>' : "") +
+          '<span class="mt-cover-score" style="border-color:' + scoreColor(avg) + ";color:" + scoreColor(avg) +
+          '">' + (avg === null ? "–" : Math.round(avg)) + "</span>" +
+          "</div>" +
+          '<div class="mt-cover-title" data-open-id="' + m.id + '">' + escapeHtml(title) + "</div>" +
+          '<div class="mt-cover-type-line">' + ty.label + "</div>" +
+          "</div>";
+      });
+      html += "</div>";
     }
 
     html += "</div>";

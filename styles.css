@@ -250,9 +250,29 @@ body {
 .mt-empty-text { color: var(--text-muted); font-size: 14px; }
 
 .mt-add-btn {
-  background: rgba(255,255,255,0.03); border: 1.5px dashed rgba(255,255,255,0.14); border-radius: 16px;
-  padding: 14px; color: var(--text-muted); font-size: 14px; font-weight: 700;
+  position: relative; display: flex; align-items: center; justify-content: center; gap: 10px;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--pink) 0%, #FF6FA8 45%, var(--amber) 100%);
+  border: none; border-radius: 18px;
+  padding: 16px; color: #1A1220; font-size: 15.5px; font-weight: 800; letter-spacing: 0.2px;
   font-family: 'Manrope', sans-serif; cursor: pointer; width: 100%;
+  box-shadow: 0 10px 26px rgba(255,61,154,0.32), 0 3px 10px rgba(255,178,56,0.22);
+  transition: transform .15s cubic-bezier(.34,1.56,.64,1), box-shadow .2s ease;
+}
+.mt-add-btn:active { transform: scale(0.97); box-shadow: 0 5px 16px rgba(255,61,154,0.28); }
+.mt-add-btn::after {
+  content: ""; position: absolute; top: 0; left: -65%; width: 45%; height: 100%;
+  background: linear-gradient(115deg, transparent, rgba(255,255,255,0.4), transparent);
+  transform: skewX(-18deg); animation: mt-add-shine 3.4s ease-in-out infinite;
+}
+@keyframes mt-add-shine {
+  0% { left: -65%; }
+  55%, 100% { left: 130%; }
+}
+.mt-add-icon {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 22px; height: 22px; border-radius: 50%; background: rgba(26,18,32,0.15);
+  font-size: 15px; font-weight: 900; line-height: 1;
 }
 
 .mt-input {
@@ -711,7 +731,7 @@ input[type="range"].mt-slider::-moz-range-thumb {
 @media (prefers-reduced-motion: reduce) {
   .mt-btn, .mt-tab-v2, .mt-tab-icon-wrap, .mt-paper, .mt-grid-card, .mt-mini-row,
   .mt-changelog-entry, .mt-stamp, .mt-cover-score, .mt-icon-round, .mt-primary-btn,
-  .mt-filter-chip, .mt-tag-chip, .mt-emotion-star, .mt-anilist-row,
+  .mt-filter-chip, .mt-tag-chip, .mt-emotion-star, .mt-anilist-row, .mt-add-btn, .mt-add-btn::after,
   .mt-reveal-backdrop, .mt-reveal-card, .mt-reveal-cover, .mt-reveal-title, .mt-reveal-stamp, .mt-reveal-notes {
     animation: none !important; transition: none !important;
   }
