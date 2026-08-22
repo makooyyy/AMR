@@ -102,6 +102,26 @@
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
     {
+      version: "49",
+      type: "update",
+      title: "Дно есть дно",
+      items: [
+        "Если все критерии оценены на 1 — итоговая оценка тоже 1, а не 10 (обычная формула ×10 в этом случае не применяется)",
+        "На карточке такого тайтла рядом со статусом чтения появляется 🤮"
+      ]
+    },
+    {
+      version: "48",
+      type: "update",
+      title: "Новая формула: без весов и множителей",
+      items: [
+        "Итог теперь — простое среднее по всем 5 критериям (Рисовка, Сюжет, Персонажи, Темп/Ритм, Атмосфера), у всех равный вес",
+        "Атмосфера больше не множитель — обычный критерий наравне с остальными",
+        "1 балл в любом из пяти критериев = 2 балла в итоговой оценке (шкала 10–100)",
+        "Проценты веса рядом с критериями убраны — они больше не нужны"
+      ]
+    },
+    {
       version: "47",
       type: "update",
       title: "Кнопка добавления тайтла — новый вид",
@@ -612,17 +632,11 @@
     return div.innerHTML;
   }
 
-  // Scoring formula: weighted sum of the 4 base criteria (weights sum to 1,
-  // so the weighted sum stays on the same 1–10 scale as the inputs), then
-  // multiplied by Атмосфера. Max: 10 × 10 = 100 exactly.
-  //   Сюжет 35% — Рисовка 28% — Темп/Ритм 22% — Персонажи 15%
-  // Custom (non-default) criteria don't factor into this — they're informational only.
-  var CRITERION_WEIGHTS = { "Сюжет": 0.35, "Рисовка": 0.28, "Темп/Ритм": 0.22, "Персонажи": 0.15 };
-
-  function weightTag(name) {
-    var w = CRITERION_WEIGHTS[name];
-    return w ? '<span class="mt-weight-tag">' + Math.round(w * 100) + "%</span>" : "";
-  }
+  // Scoring formula: plain average of the 5 default criteria (equal weight,
+  // Атмосфера included like any other — no more multiplier), scaled ×10 onto
+  // a 1–100 scale. With all 5 present, moving one criterion by 1 point moves
+  // the final score by exactly 2 (1/5 of the average × 10).
+  // Custom (non-default) criteria still don't factor into this — informational only.
 
   function buildScoreText(m) {
     var avg = average(m.criteria);
@@ -631,9 +645,7 @@
     lines.push("Итоговая оценка: " + (avg === null ? "—" : Math.round(avg)) + "/100");
     lines.push("");
     m.criteria.forEach(function (c) {
-      var w = CRITERION_WEIGHTS[c.name];
-      var suffix = c.name === "Атмосфера" ? " (множитель)" : (w ? " (вес " + Math.round(w * 100) + "%)" : "");
-      lines.push(c.name + ": " + c.score.toFixed(1) + suffix);
+      lines.push(c.name + ": " + c.score.toFixed(1));
     });
     if (m.tags && m.tags.length) {
       lines.push("");
@@ -644,31 +656,30 @@
 
   function average(criteria) {
     if (!criteria.length) return null;
+
+    // Special case: if literally every criterion is at rock bottom (1), the
+    // final score is 1 — not the 10 the usual ×10 scale would give. A title
+    // this bad shouldn't get rounded up just because of the scale factor.
+    if (criteria.every(function (c) { return c.score === 1; })) return 1;
+
     var find = function (name) {
       var c = criteria.find(function (cc) { return cc.name === name; });
       return c ? c.score : null;
     };
-    var art = find("Рисовка");
-    var plot = find("Сюжет");
-    var chars = find("Персонажи");
-    var dynamics = find("Темп/Ритм");
-    var atmosphereRaw = find("Атмосфера");
+    var defaults = [find("Рисовка"), find("Сюжет"), find("Персонажи"), find("Темп/Ритм"), find("Атмосфера")]
+      .filter(function (v) { return v !== null; });
 
-    // Fall back to a plain average if this isn't a "standard" rated title
-    // (e.g. all default criteria were removed) so we never silently show 0.
-    if (art === null && plot === null && chars === null && dynamics === null && atmosphereRaw === null) {
+    if (defaults.length) {
       var sum = 0;
-      for (var i = 0; i < criteria.length; i++) sum += criteria[i].score;
-      return sum / criteria.length;
+      for (var i = 0; i < defaults.length; i++) sum += defaults[i];
+      return (sum / defaults.length) * 10;
     }
 
-    var weightedSum =
-      (plot || 0) * CRITERION_WEIGHTS["Сюжет"] +
-      (art || 0) * CRITERION_WEIGHTS["Рисовка"] +
-      (dynamics || 0) * CRITERION_WEIGHTS["Темп/Ритм"] +
-      (chars || 0) * CRITERION_WEIGHTS["Персонажи"];
-    var atmosphere = atmosphereRaw === null ? 1 : atmosphereRaw;
-    return weightedSum * atmosphere;
+    // No default criteria at all (every one of the 5 was removed, only custom
+    // ones left) — plain average of whatever's there, same 1–100 scale.
+    var total = 0;
+    for (var j = 0; j < criteria.length; j++) total += criteria[j].score;
+    return (total / criteria.length) * 10;
   }
 
   function scoreColor(v) {
@@ -1791,6 +1802,7 @@
         var st = statusById(m.status);
         var ty = typeById(m.type || "manhwa");
         var isWinnerTitle = positiveAwardsForManhwa(m).length > 0;
+        var isRockBottom = m.criteria.length > 0 && m.criteria.every(function (c) { return c.score === 1; });
         var coverStyle = m.coverUrl
           ? "background-image:url('" + escapeHtml(m.coverUrl).replace(/'/g, "%27") + "')"
           : "";
@@ -1801,7 +1813,10 @@
           '<div class="mt-cover' + (m.coverUrl ? "" : " mt-cover-empty") + (isWinnerTitle ? " mt-cover-winner" : "") +
           '" style="' + coverStyle + '" data-open-id="' + m.id + '">' +
           (m.coverUrl ? "" : '<span class="mt-cover-fallback">' + escapeHtml((title[0] || "?").toUpperCase()) + "</span>") +
+          '<div class="mt-cover-top-row">' +
           '<span class="mt-cover-status" style="background:' + st.color + '">' + st.label + "</span>" +
+          (isRockBottom ? '<span class="mt-cover-worst" title="Оценено на дно по всем критериям">🤮</span>' : "") +
+          "</div>" +
           (isWinnerTitle ? '<span class="mt-cover-trophy">🏆</span>' : "") +
           '<span class="mt-cover-score" style="border-color:' + scoreColor(avg) + ";color:" + scoreColor(avg) +
           '">' + (avg === null ? "–" : Math.round(avg)) + "</span>" +
@@ -1953,7 +1968,7 @@
         html +=
           '<div class="mt-crit-row" data-crit-id="' + c.id + '">' +
           '<div class="mt-crit-top">' +
-          '<span class="mt-crit-name">' + escapeHtml(c.name) + "</span>" + weightTag(c.name) +
+          '<span class="mt-crit-name">' + escapeHtml(c.name) + "</span>" +
           '<div class="mt-crit-right">' +
           '<span class="mt-crit-score" data-score-label="' + c.id + '" style="color:' + color + '">' +
           c.score.toFixed(1) + "</span>" +
@@ -1967,7 +1982,7 @@
       m.criteria.forEach(function (c) {
         var color = criterionColor(c.score);
         html +=
-          '<div class="mt-bar-row"><span class="mt-bar-name">' + escapeHtml(c.name) + "</span>" + weightTag(c.name) +
+          '<div class="mt-bar-row"><span class="mt-bar-name">' + escapeHtml(c.name) + "</span>" +
           '<div class="mt-bar-track"><div class="mt-bar-fill" style="width:' + (c.score / 10) * 100 +
           "%;background:" + color + ';"></div></div>' +
           '<span class="mt-bar-value" style="color:' + color + '">' + c.score.toFixed(1) + "</span></div>";
@@ -2323,7 +2338,7 @@
     if (agg.length > 0) {
       var bars = agg.slice().sort(function (a, b) { return b.score - a.score; }).map(function (c) {
         return (
-          '<div class="mt-bar-row"><span class="mt-bar-name">' + escapeHtml(c.name) + "</span>" + weightTag(c.name) +
+          '<div class="mt-bar-row"><span class="mt-bar-name">' + escapeHtml(c.name) + "</span>" +
           '<div class="mt-bar-track"><div class="mt-bar-fill" style="width:' + (c.score / 10) * 100 +
           '%;background:#FFB238;"></div></div>' +
           '<span class="mt-bar-value" style="color:#FFB238">' + c.score.toFixed(1) + "</span></div>"

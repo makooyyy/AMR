@@ -170,12 +170,21 @@ body {
 .mt-cover-fallback {
   font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 34px; color: rgba(255,255,255,0.12);
 }
+.mt-cover-top-row {
+  position: absolute; top: 8px; left: 8px; right: 8px;
+  display: flex; align-items: center; gap: 5px;
+}
 .mt-cover-status {
-  position: absolute; top: 8px; left: 8px; max-width: calc(100% - 20px);
+  max-width: 100%;
   font-size: 9.5px; font-weight: 800; color: #0D0A14; text-align: left;
   padding: 3px 8px; border-radius: 20px; letter-spacing: 0.1px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+.mt-cover-worst {
+  font-size: 13px; flex-shrink: 0;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));
+  animation: mtPop .35s cubic-bezier(.34,1.56,.64,1) both;
 }
 .mt-cover-score {
   position: absolute; right: 7px; bottom: 7px;
@@ -376,10 +385,6 @@ body {
 .mt-crit-row { display: flex; flex-direction: column; gap: 7px; }
 .mt-crit-top { display: flex; justify-content: space-between; align-items: baseline; }
 .mt-crit-name { font-size: 13.5px; color: var(--text-primary); font-weight: 700; }
-.mt-weight-tag {
-  font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; color: var(--text-faint);
-  background: rgba(255,255,255,0.06); border-radius: 6px; padding: 1px 5px; margin-left: 6px;
-}
 .mt-crit-right { display: flex; align-items: center; gap: 8px; }
 .mt-crit-score { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 15px; min-width: 30px; text-align: right; }
 
@@ -732,6 +737,7 @@ input[type="range"].mt-slider::-moz-range-thumb {
   .mt-btn, .mt-tab-v2, .mt-tab-icon-wrap, .mt-paper, .mt-grid-card, .mt-mini-row,
   .mt-changelog-entry, .mt-stamp, .mt-cover-score, .mt-icon-round, .mt-primary-btn,
   .mt-filter-chip, .mt-tag-chip, .mt-emotion-star, .mt-anilist-row, .mt-add-btn, .mt-add-btn::after,
+  .mt-cover-trophy, .mt-cover-worst,
   .mt-reveal-backdrop, .mt-reveal-card, .mt-reveal-cover, .mt-reveal-title, .mt-reveal-stamp, .mt-reveal-notes {
     animation: none !important; transition: none !important;
   }
