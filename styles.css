@@ -379,6 +379,39 @@ body {
 }
 .mt-tag-stat b { font-family: 'Space Mono', monospace; color: var(--text-muted); font-weight: 700; }
 
+/* Activity heatmap */
+.mt-heatmap-scroll { overflow-x: auto; padding-bottom: 2px; }
+.mt-heatmap-scroll::-webkit-scrollbar { height: 4px; }
+.mt-heatmap-grid { display: inline-flex; gap: 3px; }
+.mt-heat-col { display: flex; flex-direction: column; gap: 3px; }
+.mt-heat-cell {
+  width: 11px; height: 11px; border-radius: 3px; background: rgba(255,255,255,0.05);
+  display: inline-block; flex-shrink: 0;
+}
+.mt-heat-cell[data-level="1"] { background: rgba(255,178,56,0.28); }
+.mt-heat-cell[data-level="2"] { background: rgba(255,178,56,0.55); }
+.mt-heat-cell[data-level="3"] { background: rgba(255,120,110,0.75); }
+.mt-heat-cell[data-level="4"] { background: linear-gradient(135deg, var(--pink), var(--amber)); }
+.mt-heat-empty { background: transparent; }
+.mt-heat-legend {
+  display: flex; align-items: center; gap: 3px; margin-top: 10px;
+  font-size: 10.5px; color: var(--text-muted);
+}
+.mt-heat-legend .mt-heat-cell { margin: 0 1px; }
+
+/* Activity diary feed */
+.mt-activity-list { display: flex; flex-direction: column; gap: 12px; }
+.mt-activity-row { display: flex; align-items: flex-start; gap: 10px; }
+.mt-activity-icon {
+  flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12.5px; background: rgba(255,255,255,0.04); margin-top: 1px;
+}
+.mt-activity-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.mt-activity-body { flex: 1; min-width: 0; }
+.mt-activity-text { font-size: 13px; color: var(--text-primary); font-weight: 600; line-height: 1.4; }
+.mt-activity-date { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
+
 .mt-lock-hint { color: var(--text-muted); font-size: 12px; margin-bottom: 4px; }
 
 .mt-criteria-panel { display: flex; flex-direction: column; gap: 20px; }

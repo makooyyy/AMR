@@ -5,6 +5,8 @@
   var AWARDS_STORAGE_KEY = "manhwa-tracker:awards:v1";
   var AWARD_CANDIDATES_STORAGE_KEY = "manhwa-tracker:award-candidates:v1";
   var AWARD_EDIT_USED_STORAGE_KEY = "manhwa-tracker:award-edit-used:v1";
+  var ACTIVITY_LOG_STORAGE_KEY = "manhwa-tracker:activity-log:v1";
+  var ACTIVITY_LOG_MAX = 3000;
 
   var DEFAULT_CRITERIA = ["Рисовка", "Сюжет", "Персонажи", "Темп/Ритм", "Атмосфера"];
 
@@ -101,6 +103,16 @@
 
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
+    {
+      version: "50",
+      type: "feature",
+      title: "Дневник и тепловая карта активности",
+      items: [
+        "На вкладке «Профиль» — тепловая карта активности за год (как контрибуции на GitHub) и лента последних событий: что добавлено, что оценено (и с каким баллом), смены статуса, победы в премиях, удаления",
+        "Работает только вперёд — прошлые действия до этого обновления в дневнике не появятся, он начинает считать с этого момента",
+        "Дневник теперь тоже входит в резервную копию (экспорт/импорт файлом)"
+      ]
+    },
     {
       version: "49",
       type: "update",
@@ -594,6 +606,7 @@
     awardWinners: {},
     awardCandidates: {},
     awardEditUsed: {},
+    activityLog: [],
     confirmEditWinnersMonth: null,
     awardsView: "month",
     awardsCategory: null,
@@ -1043,6 +1056,12 @@
     } catch (e) {
       state.awardEditUsed = {};
     }
+    try {
+      var rawLog = window.localStorage.getItem(ACTIVITY_LOG_STORAGE_KEY);
+      state.activityLog = rawLog ? JSON.parse(rawLog) : [];
+    } catch (e) {
+      state.activityLog = [];
+    }
 
     // Carry the "Динамика" → "Темп/Ритм" rename over into already-saved award
     // picks so old choices for that category keep working under the new key.
@@ -1108,6 +1127,23 @@
       window.localStorage.setItem(AWARD_CANDIDATES_STORAGE_KEY, JSON.stringify(state.awardCandidates));
       window.localStorage.setItem(AWARD_EDIT_USED_STORAGE_KEY, JSON.stringify(state.awardEditUsed));
     } catch (e) {}
+  }
+
+  function saveActivityLog() {
+    try {
+      window.localStorage.setItem(ACTIVITY_LOG_STORAGE_KEY, JSON.stringify(state.activityLog));
+    } catch (e) {}
+  }
+
+  // Records one diary entry. Only called for meaningful, user-initiated
+  // moments (not every slider tick) — see the call sites. Caps the log so a
+  // years-old install doesn't grow localStorage without bound.
+  function logActivity(type, manhwaId, title, extra) {
+    state.activityLog.push({ ts: Date.now(), type: type, manhwaId: manhwaId, title: title, extra: extra || null });
+    if (state.activityLog.length > ACTIVITY_LOG_MAX) {
+      state.activityLog.splice(0, state.activityLog.length - ACTIVITY_LOG_MAX);
+    }
+    saveActivityLog();
   }
 
   /* ---------- svg pieces ---------- */
@@ -2290,6 +2326,150 @@
     );
   }
 
+  function pad2(n) {
+    return n < 10 ? "0" + n : "" + n;
+  }
+
+  function pluralRu(n, forms) {
+    var n10 = n % 10, n100 = n % 100;
+    if (n10 === 1 && n100 !== 11) return forms[0];
+    if (n10 >= 2 && n10 <= 4 && (n100 < 10 || n100 >= 20)) return forms[1];
+    return forms[2];
+  }
+
+  function formatActivityDate(ts) {
+    var d = new Date(ts);
+    var now = new Date();
+    var time = pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+    if (d.toDateString() === now.toDateString()) return "Сегодня, " + time;
+    var yest = new Date(now);
+    yest.setDate(yest.getDate() - 1);
+    if (d.toDateString() === yest.toDateString()) return "Вчера, " + time;
+    var label = d.getDate() + " " + MONTH_NAMES_GENITIVE[d.getMonth()];
+    if (d.getFullYear() !== now.getFullYear()) label += " " + d.getFullYear();
+    return label + ", " + time;
+  }
+
+  function activityIcon(e) {
+    if (e.type === "add") return "➕";
+    if (e.type === "rated") return "⭐";
+    if (e.type === "status") {
+      var st = e.extra && statusById(e.extra.status);
+      return st ? '<span class="mt-activity-dot" style="background:' + st.color + '"></span>' : "•";
+    }
+    if (e.type === "award") return awardIcon(e.extra ? e.extra.categoryKey : "");
+    if (e.type === "delete") return "✕";
+    return "•";
+  }
+
+  function activityLineText(e) {
+    var t = escapeHtml(e.title || "");
+    if (e.type === "add") return "Добавлен тайтл «" + t + "»";
+    if (e.type === "rated") {
+      var score = e.extra && e.extra.score !== null && e.extra.score !== undefined ? Math.round(e.extra.score) : null;
+      return "Оценён «" + t + "»" + (score !== null ? " — " + score + "/100" : "");
+    }
+    if (e.type === "status") {
+      var st = e.extra && statusById(e.extra.status);
+      return "«" + t + "»: статус «" + escapeHtml(st ? st.label : "?") + "»";
+    }
+    if (e.type === "award") {
+      var catLabel = e.extra ? (AWARD_LABELS[e.extra.categoryKey] || e.extra.categoryKey) : "";
+      var mLabel = e.extra ? monthLabel(e.extra.monthKey) : "";
+      return "«" + t + "» — " + escapeHtml(catLabel) + " (" + escapeHtml(mLabel) + ")";
+    }
+    if (e.type === "delete") return "Удалён тайтл «" + t + "»";
+    return t;
+  }
+
+  // Mon–Sun weeks for the last ~53 weeks (GitHub-style year window), each day
+  // holding its activity-log event count. Days after today are left as null
+  // placeholders so the grid still lines up into full week columns.
+  function buildActivityHeatmap() {
+    var counts = {};
+    state.activityLog.forEach(function (e) {
+      var d = new Date(e.ts);
+      var key = d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+      counts[key] = (counts[key] || 0) + 1;
+    });
+
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    var start = new Date(today);
+    start.setDate(start.getDate() - 370);
+    var dow = (start.getDay() + 6) % 7; // 0 = Monday
+    start.setDate(start.getDate() - dow);
+
+    var weeks = [];
+    var cursor = new Date(start);
+    while (cursor <= today) {
+      var week = [];
+      for (var i = 0; i < 7; i++) {
+        if (cursor > today) {
+          week.push(null);
+        } else {
+          var key = cursor.getFullYear() + "-" + pad2(cursor.getMonth() + 1) + "-" + pad2(cursor.getDate());
+          week.push({ date: new Date(cursor), count: counts[key] || 0 });
+        }
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      weeks.push(week);
+    }
+    return weeks;
+  }
+
+  function renderActivityHeatmap() {
+    var weeks = buildActivityHeatmap();
+    var maxCount = 1;
+    weeks.forEach(function (w) { w.forEach(function (d) { if (d && d.count > maxCount) maxCount = d.count; }); });
+
+    function levelFor(count) {
+      if (count === 0) return 0;
+      var ratio = count / maxCount;
+      if (ratio > 0.75) return 4;
+      if (ratio > 0.5) return 3;
+      if (ratio > 0.25) return 2;
+      return 1;
+    }
+
+    var cols = weeks.map(function (week) {
+      var cells = week.map(function (d) {
+        if (!d) return '<span class="mt-heat-cell mt-heat-empty"></span>';
+        var dateLabel = d.date.getDate() + " " + MONTH_NAMES_GENITIVE[d.date.getMonth()];
+        var title = dateLabel + ": " + d.count + " " + pluralRu(d.count, ["событие", "события", "событий"]);
+        return '<span class="mt-heat-cell" data-level="' + levelFor(d.count) + '" title="' + escapeHtml(title) + '"></span>';
+      }).join("");
+      return '<div class="mt-heat-col">' + cells + "</div>";
+    }).join("");
+
+    return (
+      '<div class="mt-paper">' +
+      '<div class="mt-panel-title">АКТИВНОСТЬ ЗА ГОД</div>' +
+      '<div class="mt-heatmap-scroll"><div class="mt-heatmap-grid">' + cols + "</div></div>" +
+      '<div class="mt-heat-legend">Меньше' +
+      '<span class="mt-heat-cell" data-level="0"></span><span class="mt-heat-cell" data-level="1"></span>' +
+      '<span class="mt-heat-cell" data-level="2"></span><span class="mt-heat-cell" data-level="3"></span>' +
+      '<span class="mt-heat-cell" data-level="4"></span>Больше</div>' +
+      "</div>"
+    );
+  }
+
+  function renderActivityFeed() {
+    if (!state.activityLog.length) return "";
+    var recent = state.activityLog.slice(-30).reverse();
+    var rows = recent.map(function (e) {
+      return (
+        '<div class="mt-activity-row">' +
+        '<span class="mt-activity-icon">' + activityIcon(e) + "</span>" +
+        '<div class="mt-activity-body">' +
+        '<div class="mt-activity-text">' + activityLineText(e) + "</div>" +
+        '<div class="mt-activity-date">' + formatActivityDate(e.ts) + "</div>" +
+        "</div></div>"
+      );
+    }).join("");
+    return '<div class="mt-paper"><div class="mt-panel-title">ДНЕВНИК</div><div class="mt-activity-list">' + rows + "</div></div>";
+  }
+
   function renderProfile() {
     var rated = state.manhwas.filter(function (m) { return m.criteria.length > 0; });
     var overallAvg = rated.length
@@ -2308,6 +2488,11 @@
       '<div class="mt-chip"><div class="mt-chip-value" style="color:#FFB238">' +
       (overallAvg === null ? "—" : Math.round(overallAvg)) + '</div><div class="mt-chip-label">средняя оценка</div></div>' +
       "</div>";
+
+    if (state.activityLog.length) {
+      html += renderActivityHeatmap();
+      html += renderActivityFeed();
+    }
 
     // status bar
     var total = state.manhwas.length || 1;
@@ -2598,9 +2783,11 @@
         var m = findManhwa(id);
         if (!m) return;
         var idx = STATUSES.findIndex(function (s) { return s.id === m.status; });
-        m.status = STATUSES[(idx + 1) % STATUSES.length].id;
+        var newStatus = STATUSES[(idx + 1) % STATUSES.length].id;
+        m.status = newStatus;
         if (m.status === "done") m.completedAt = Date.now();
         save();
+        logActivity("status", m.id, m.title, { status: newStatus });
         render();
       });
     });
@@ -2624,11 +2811,13 @@
         e.stopPropagation();
         var id = btn.getAttribute("data-delete-id");
         if (state.confirmDeleteId === id) {
+          var deletedTitle = findManhwa(id);
           purgeAwardReferences(id);
           state.manhwas = state.manhwas.filter(function (m) { return m.id !== id; });
           if (state.selectedId === id) state.selectedId = null;
           state.confirmDeleteId = null;
           save();
+          if (deletedTitle) logActivity("delete", id, deletedTitle.title, null);
           render();
         } else {
           state.confirmDeleteId = id;
@@ -2739,6 +2928,7 @@
         m.altTitles.ko = state.pendingAltTitlesDraft.ko || "";
       }
       state.manhwas.push(m);
+      logActivity("add", m.id, m.title, { type: m.type });
       state.addingManhwa = false;
       state.pendingTitleDraft = "";
       state.pendingCoverDraft = "";
@@ -2805,7 +2995,10 @@
         var categoryKey = row.getAttribute("data-category");
         var pickKey = monthKey + "|" + categoryKey + "|" + manhwaId;
         if (state.confirmWinnerPick === pickKey) {
-          setWinner(monthKey, categoryKey, manhwaId);
+          if (setWinner(monthKey, categoryKey, manhwaId)) {
+            var wm = findManhwa(manhwaId);
+            logActivity("award", manhwaId, wm ? wm.title : "", { monthKey: monthKey, categoryKey: categoryKey });
+          }
           state.confirmWinnerPick = null;
           render();
         } else {
@@ -2953,7 +3146,10 @@
       if (m) m.rated = true;
       delete state.unlockedIds[id];
       save();
-      if (wasNew) state.revealManhwaId = id;
+      if (wasNew && m) {
+        logActivity("rated", m.id, m.title, { score: average(m.criteria) });
+        state.revealManhwaId = id;
+      }
       render();
     });
 
@@ -3117,15 +3313,16 @@
     // export to file
     var exportBtn = document.getElementById("export-btn");
     if (exportBtn) exportBtn.addEventListener("click", function () {
-      // Wrapped format (v2) carries award history too — a plain array (old
-      // exports) still imports fine, just without awards, for backward compat.
+      // Wrapped format carries award history and the activity diary too — a
+      // plain array (old exports) still imports fine, just without those.
       var backup = {
         format: "am-tracker-backup",
-        version: 2,
+        version: 3,
         manhwas: state.manhwas,
         awardWinners: state.awardWinners,
         awardCandidates: state.awardCandidates,
-        awardEditUsed: state.awardEditUsed
+        awardEditUsed: state.awardEditUsed,
+        activityLog: state.activityLog
       };
       var json = JSON.stringify(backup, null, 2);
       var date = new Date().toISOString().slice(0, 10);
@@ -3169,6 +3366,7 @@
           try {
             var parsed = JSON.parse(reader.result);
             var manhwas, awardWinners, awardCandidates, awardEditUsed, hasAwards;
+            var activityLog = null, hasLog = false;
 
             if (Array.isArray(parsed)) {
               // Legacy export (pre-v2) — titles only, no award history in the file.
@@ -3180,15 +3378,21 @@
               awardCandidates = (parsed.awardCandidates && typeof parsed.awardCandidates === "object") ? parsed.awardCandidates : {};
               awardEditUsed = (parsed.awardEditUsed && typeof parsed.awardEditUsed === "object") ? parsed.awardEditUsed : {};
               hasAwards = true;
+              if (Array.isArray(parsed.activityLog)) {
+                activityLog = parsed.activityLog;
+                hasLog = true;
+              }
             } else {
               throw new Error("bad format");
             }
 
             var confirmMsg = "Заменить текущий список (" + state.manhwas.length +
               ") данными из файла (" + manhwas.length + ")? Текущие оценки" +
-              (hasAwards ? " и награды" : "") + " будут удалены.";
+              (hasAwards ? ", награды" : "") + (hasLog ? " и дневник активности" : "") + " будут удалены.";
             if (!hasAwards) {
               confirmMsg += " В этом файле нет данных о наградах (старый формат бэкапа) — награды останутся как есть.";
+            } else if (!hasLog) {
+              confirmMsg += " В этом файле нет дневника активности (более старый бэкап) — текущий дневник останется как есть.";
             }
 
             var replace = state.manhwas.length === 0 || window.confirm(confirmMsg);
@@ -3199,9 +3403,11 @@
                 state.awardCandidates = awardCandidates;
                 state.awardEditUsed = awardEditUsed;
               }
+              if (hasLog) state.activityLog = activityLog;
               state.error = null;
               save();
               if (hasAwards) saveAwards();
+              if (hasLog) saveActivityLog();
               render();
             }
           } catch (e) {
