@@ -7,6 +7,84 @@
   var AWARD_EDIT_USED_STORAGE_KEY = "manhwa-tracker:award-edit-used:v1";
   var ACTIVITY_LOG_STORAGE_KEY = "manhwa-tracker:activity-log:v1";
   var ACTIVITY_LOG_MAX = 3000;
+  var CHANGELOG_SEEN_KEY = "manhwa-tracker:changelog-seen:v1";
+
+  // Storage backend: IndexedDB (no practical size cap, unlike localStorage's
+  // ~5-10MB ceiling) with a one-time migration from the old localStorage data,
+  // and a full fallback to localStorage if IndexedDB isn't available at all.
+  var IDB_NAME = "manhwa-tracker-db";
+  var IDB_STORE = "kv";
+  var IDB_MIGRATED_KEY = "manhwa-tracker:idb-migrated:v1";
+  var idbAvailable = true;
+  var idbConnPromise = null;
+
+  function openIdb() {
+    if (idbConnPromise) return idbConnPromise;
+    idbConnPromise = new Promise(function (resolve, reject) {
+      if (!window.indexedDB) { reject(new Error("indexeddb unsupported")); return; }
+      var req;
+      try {
+        req = window.indexedDB.open(IDB_NAME, 1);
+      } catch (e) { reject(e); return; }
+      req.onupgradeneeded = function () {
+        var db = req.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error || new Error("indexeddb open failed")); };
+      req.onblocked = function () { reject(new Error("indexeddb blocked")); };
+    });
+    return idbConnPromise;
+  }
+
+  function idbGet(key) {
+    return openIdb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx;
+        try { tx = db.transaction(IDB_STORE, "readonly"); } catch (e) { reject(e); return; }
+        var req = tx.objectStore(IDB_STORE).get(key);
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror = function () { reject(req.error); };
+      });
+    });
+  }
+
+  function idbSet(key, value) {
+    return openIdb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx;
+        try { tx = db.transaction(IDB_STORE, "readwrite"); } catch (e) { reject(e); return; }
+        tx.objectStore(IDB_STORE).put(value, key);
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  }
+
+  function localSetPromise(key, value) {
+    return new Promise(function (resolve, reject) {
+      try {
+        window.localStorage.setItem(key, JSON.stringify(value));
+        resolve();
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  // Picks the active backend (IndexedDB, or localStorage if IDB isn't usable
+  // in this browser) — every save*() function below goes through this.
+  function persistKey(key, value) {
+    return idbAvailable ? idbSet(key, value) : localSetPromise(key, value);
+  }
+
+  function persistChangelogSeen(version) {
+    if (idbAvailable) {
+      idbSet(CHANGELOG_SEEN_KEY, version).catch(function () {});
+    } else {
+      try { window.localStorage.setItem(CHANGELOG_SEEN_KEY, version); } catch (e) {}
+    }
+  }
 
   var DEFAULT_CRITERIA = ["Рисовка", "Сюжет", "Персонажи", "Темп/Ритм", "Атмосфера"];
 
@@ -103,6 +181,16 @@
 
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
+    {
+      version: "51",
+      type: "update",
+      title: "Хранилище данных — IndexedDB",
+      items: [
+        "Приложение теперь хранит все данные в IndexedDB вместо localStorage — снят практический потолок в ~5-10 МБ, актуально по мере роста библиотеки, обложек и дневника активности",
+        "Перенос старых данных происходит автоматически и один раз, при первом запуске после обновления — ничего делать не нужно",
+        "Если IndexedDB недоступен в браузере — приложение само переключится обратно на localStorage, как раньше"
+      ]
+    },
     {
       version: "50",
       type: "feature",
@@ -588,8 +676,6 @@
     'stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>' +
     '<circle cx="12" cy="7" r="4"/></svg>';
 
-  var CHANGELOG_SEEN_KEY = "manhwa-tracker:changelog-seen:v1";
-
   var lastViewKey = null;
 
   var state = {
@@ -1026,43 +1112,47 @@
   }
 
   /* ---------- persistence ---------- */
-  function load() {
+  // Reads the pre-IndexedDB localStorage format — used both as the one-time
+  // migration source and as the permanent fallback if IndexedDB never works.
+  function loadFromLocalStorageInto(target) {
     try {
       var raw = window.localStorage.getItem(STORAGE_KEY);
-      state.manhwas = raw ? JSON.parse(raw) : [];
+      target.manhwas = raw ? JSON.parse(raw) : [];
     } catch (e) {
-      state.manhwas = [];
+      target.manhwas = [];
     }
     try {
-      state.changelogSeenVersion = window.localStorage.getItem(CHANGELOG_SEEN_KEY);
+      target.changelogSeenVersion = window.localStorage.getItem(CHANGELOG_SEEN_KEY);
     } catch (e) {
-      state.changelogSeenVersion = null;
+      target.changelogSeenVersion = null;
     }
     try {
       var rawAwards = window.localStorage.getItem(AWARDS_STORAGE_KEY);
-      state.awardWinners = rawAwards ? JSON.parse(rawAwards) : {};
+      target.awardWinners = rawAwards ? JSON.parse(rawAwards) : {};
     } catch (e) {
-      state.awardWinners = {};
+      target.awardWinners = {};
     }
     try {
       var rawCandidates = window.localStorage.getItem(AWARD_CANDIDATES_STORAGE_KEY);
-      state.awardCandidates = rawCandidates ? JSON.parse(rawCandidates) : {};
+      target.awardCandidates = rawCandidates ? JSON.parse(rawCandidates) : {};
     } catch (e) {
-      state.awardCandidates = {};
+      target.awardCandidates = {};
     }
     try {
       var rawEditUsed = window.localStorage.getItem(AWARD_EDIT_USED_STORAGE_KEY);
-      state.awardEditUsed = rawEditUsed ? JSON.parse(rawEditUsed) : {};
+      target.awardEditUsed = rawEditUsed ? JSON.parse(rawEditUsed) : {};
     } catch (e) {
-      state.awardEditUsed = {};
+      target.awardEditUsed = {};
     }
     try {
       var rawLog = window.localStorage.getItem(ACTIVITY_LOG_STORAGE_KEY);
-      state.activityLog = rawLog ? JSON.parse(rawLog) : [];
+      target.activityLog = rawLog ? JSON.parse(rawLog) : [];
     } catch (e) {
-      state.activityLog = [];
+      target.activityLog = [];
     }
+  }
 
+  function applyPostLoadMigrations() {
     // Carry the "Динамика" → "Темп/Ритм" rename over into already-saved award
     // picks so old choices for that category keep working under the new key.
     var awardsMigrated = false;
@@ -1112,27 +1202,68 @@
     if (migrated) save();
   }
 
+  // Loads app state. Prefers IndexedDB (no practical size cap); the very
+  // first time this runs on a device it migrates whatever's in localStorage
+  // (or starts empty, on a fresh install) into IndexedDB and marks that done
+  // so it only ever happens once. If IndexedDB isn't usable at all in this
+  // browser, falls back fully to localStorage — same as before IDB support.
+  function load() {
+    return openIdb()
+      .then(function () {
+        return idbGet(IDB_MIGRATED_KEY);
+      })
+      .then(function (migrated) {
+        if (migrated) {
+          return Promise.all([
+            idbGet(STORAGE_KEY), idbGet(CHANGELOG_SEEN_KEY), idbGet(AWARDS_STORAGE_KEY),
+            idbGet(AWARD_CANDIDATES_STORAGE_KEY), idbGet(AWARD_EDIT_USED_STORAGE_KEY), idbGet(ACTIVITY_LOG_STORAGE_KEY)
+          ]).then(function (r) {
+            state.manhwas = r[0] || [];
+            state.changelogSeenVersion = r[1] || null;
+            state.awardWinners = r[2] || {};
+            state.awardCandidates = r[3] || {};
+            state.awardEditUsed = r[4] || {};
+            state.activityLog = r[5] || [];
+          });
+        }
+        loadFromLocalStorageInto(state);
+        return Promise.all([
+          idbSet(STORAGE_KEY, state.manhwas),
+          idbSet(CHANGELOG_SEEN_KEY, state.changelogSeenVersion),
+          idbSet(AWARDS_STORAGE_KEY, state.awardWinners),
+          idbSet(AWARD_CANDIDATES_STORAGE_KEY, state.awardCandidates),
+          idbSet(AWARD_EDIT_USED_STORAGE_KEY, state.awardEditUsed),
+          idbSet(ACTIVITY_LOG_STORAGE_KEY, state.activityLog),
+          idbSet(IDB_MIGRATED_KEY, true)
+        ]);
+      })
+      .catch(function () {
+        // IndexedDB unavailable/broken in this browser — fall back fully to
+        // localStorage, exactly like the app worked before IndexedDB support.
+        idbAvailable = false;
+        loadFromLocalStorageInto(state);
+      })
+      .then(function () {
+        applyPostLoadMigrations();
+      });
+  }
+
   function save() {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state.manhwas));
-      state.error = null;
-    } catch (e) {
+    state.error = null;
+    persistKey(STORAGE_KEY, state.manhwas).catch(function () {
       state.error = "Не удалось сохранить данные на этом устройстве.";
-    }
+      render();
+    });
   }
 
   function saveAwards() {
-    try {
-      window.localStorage.setItem(AWARDS_STORAGE_KEY, JSON.stringify(state.awardWinners));
-      window.localStorage.setItem(AWARD_CANDIDATES_STORAGE_KEY, JSON.stringify(state.awardCandidates));
-      window.localStorage.setItem(AWARD_EDIT_USED_STORAGE_KEY, JSON.stringify(state.awardEditUsed));
-    } catch (e) {}
+    persistKey(AWARDS_STORAGE_KEY, state.awardWinners).catch(function () {});
+    persistKey(AWARD_CANDIDATES_STORAGE_KEY, state.awardCandidates).catch(function () {});
+    persistKey(AWARD_EDIT_USED_STORAGE_KEY, state.awardEditUsed).catch(function () {});
   }
 
   function saveActivityLog() {
-    try {
-      window.localStorage.setItem(ACTIVITY_LOG_STORAGE_KEY, JSON.stringify(state.activityLog));
-    } catch (e) {}
+    persistKey(ACTIVITY_LOG_STORAGE_KEY, state.activityLog).catch(function () {});
   }
 
   // Records one diary entry. Only called for meaningful, user-initiated
@@ -2963,7 +3094,7 @@
       state.showChangelog = true;
       if (CHANGELOG.length > 0) {
         state.changelogSeenVersion = CHANGELOG[0].version;
-        try { window.localStorage.setItem(CHANGELOG_SEEN_KEY, CHANGELOG[0].version); } catch (e) {}
+        persistChangelogSeen(CHANGELOG[0].version);
       }
       render();
     });
@@ -3440,8 +3571,7 @@
   }
 
   /* ---------- boot ---------- */
-  load();
-  render();
+  load().then(render).catch(function () { render(); });
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function () {
