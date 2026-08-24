@@ -167,6 +167,7 @@
   var AWARD_LABELS = {
     overall: "Тайтл месяца",
     worst: "Худший тайтл месяца",
+    cover: "Обложка месяца",
     "Рисовка": "Лучшая рисовка",
     "Сюжет": "Лучший сюжет",
     "Персонажи": "Лучшие персонажи",
@@ -181,6 +182,15 @@
 
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
+    {
+      version: "53",
+      type: "feature",
+      title: "Обложка месяца + крупнее тепловая карта",
+      items: [
+        "Новая номинация «Обложка месяца» — участвуют тайтлы с загруженной обложкой, сортировка по критерию «Рисовка» (своей оценки для обложки отдельно нет)",
+        "Клетки тепловой карты активности теперь растягиваются на всю ширину карточки, а не жмутся мелкими квадратиками в углу"
+      ]
+    },
     {
       version: "52",
       type: "update",
@@ -838,7 +848,7 @@
     return MONTH_NAMES_GENITIVE[idx] + " " + parts[0];
   }
 
-  var AWARD_CATEGORY_KEYS = ["overall", "worst"].concat(DEFAULT_CRITERIA);
+  var AWARD_CATEGORY_KEYS = ["overall", "worst"].concat(DEFAULT_CRITERIA).concat(["cover"]);
 
   // "overall" and "worst" are both scored on the 0-100 average scale;
   // per-criterion categories use the raw 1-10 criterion score.
@@ -860,6 +870,12 @@
     var eligible = eligibleForMonth(monthKey);
     var scored = [];
     eligible.forEach(function (m) {
+      if (categoryKey === "cover") {
+        if (!m.coverUrl) return;
+        var artCriterion = m.criteria.find(function (cc) { return cc.name === "Рисовка"; });
+        scored.push({ manhwa: m, score: artCriterion ? artCriterion.score : 0 });
+        return;
+      }
       if (categoryKey === "overall" || categoryKey === "worst") {
         var avg = average(m.criteria);
         if (avg !== null) scored.push({ manhwa: m, score: avg });
@@ -2315,6 +2331,7 @@
     var monthKey = monthKeyOf(ts);
     var categories = AWARD_CATEGORY_KEYS.filter(function (ck) {
       if (getWinner(monthKey, ck)) return false;
+      if (ck === "cover") return !!m.coverUrl;
       if (isOverallScaleCategory(ck)) return average(m.criteria) !== null;
       return m.criteria.some(function (c) { return c.name === ck; });
     });
