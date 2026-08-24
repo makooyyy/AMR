@@ -182,6 +182,16 @@
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
     {
+      version: "52",
+      type: "update",
+      title: "Дневник — теперь у каждого тайтла свой",
+      items: [
+        "Тепловая карта в «Профиле» теперь показывает активность за месяц, а не за год",
+        "Общий дневник со вкладки «Профиль» убран",
+        "Вместо него — свой дневник на странице каждого тайтла: что с ним происходило (добавление, оценка, смена статуса, победы в премиях)"
+      ]
+    },
+    {
       version: "51",
       type: "update",
       title: "Хранилище данных — IndexedDB",
@@ -2418,6 +2428,8 @@
         '" style="width:100%">✎ Изменить</button>';
     }
 
+    html += renderActivityFeedForManhwa(m);
+
     var confirmingDelete = state.confirmDeleteId === m.id;
     html += '<button class="mt-clear-btn' + (confirmingDelete ? " confirm" : "") +
       '" data-delete-id="' + m.id + '" style="width:100%">' +
@@ -2527,7 +2539,7 @@
     var today = new Date();
     today.setHours(0, 0, 0, 0);
     var start = new Date(today);
-    start.setDate(start.getDate() - 370);
+    start.setDate(start.getDate() - 29); // rolling last 30 days
     var dow = (start.getDay() + 6) % 7; // 0 = Monday
     start.setDate(start.getDate() - dow);
 
@@ -2575,7 +2587,7 @@
 
     return (
       '<div class="mt-paper">' +
-      '<div class="mt-panel-title">АКТИВНОСТЬ ЗА ГОД</div>' +
+      '<div class="mt-panel-title">АКТИВНОСТЬ ЗА МЕСЯЦ</div>' +
       '<div class="mt-heatmap-scroll"><div class="mt-heatmap-grid">' + cols + "</div></div>" +
       '<div class="mt-heat-legend">Меньше' +
       '<span class="mt-heat-cell" data-level="0"></span><span class="mt-heat-cell" data-level="1"></span>' +
@@ -2585,10 +2597,8 @@
     );
   }
 
-  function renderActivityFeed() {
-    if (!state.activityLog.length) return "";
-    var recent = state.activityLog.slice(-30).reverse();
-    var rows = recent.map(function (e) {
+  function renderActivityRows(events) {
+    return events.map(function (e) {
       return (
         '<div class="mt-activity-row">' +
         '<span class="mt-activity-icon">' + activityIcon(e) + "</span>" +
@@ -2598,7 +2608,14 @@
         "</div></div>"
       );
     }).join("");
-    return '<div class="mt-paper"><div class="mt-panel-title">ДНЕВНИК</div><div class="mt-activity-list">' + rows + "</div></div>";
+  }
+
+  // Per-title diary, shown on that title's own detail page — not a global feed.
+  function renderActivityFeedForManhwa(m) {
+    var events = state.activityLog.filter(function (e) { return e.manhwaId === m.id; });
+    if (!events.length) return "";
+    var rows = renderActivityRows(events.slice().reverse());
+    return '<div class="mt-paper"><div class="mt-panel-title">ДНЕВНИК ТАЙТЛА</div><div class="mt-activity-list">' + rows + "</div></div>";
   }
 
   function renderProfile() {
@@ -2622,7 +2639,6 @@
 
     if (state.activityLog.length) {
       html += renderActivityHeatmap();
-      html += renderActivityFeed();
     }
 
     // status bar
