@@ -7,6 +7,7 @@
   var AWARD_EDIT_USED_STORAGE_KEY = "manhwa-tracker:award-edit-used:v1";
   var ACTIVITY_LOG_STORAGE_KEY = "manhwa-tracker:activity-log:v1";
   var ACTIVITY_LOG_MAX = 3000;
+  var XP_STORAGE_KEY = "manhwa-tracker:xp:v1";
   var CHANGELOG_SEEN_KEY = "manhwa-tracker:changelog-seen:v1";
 
   // Storage backend: IndexedDB (no practical size cap, unlike localStorage's
@@ -87,6 +88,45 @@
   }
 
   var DEFAULT_CRITERIA = ["Рисовка", "Сюжет", "Персонажи", "Темп/Ритм", "Атмосфера"];
+
+  // XP awarded per meaningful action — mirrors the activity-log event types.
+  // "add"/"rated"/"award" are also used to seed a one-time XP baseline from
+  // the library's existing history (see seedXpFromCurrentState), so a
+  // long-time user doesn't start at rank zero after this update.
+  var XP_VALUES = { add: 5, rated: 25, status: 3, award: 15, delete: 0 };
+
+  // Rank tiers, lowest first. Each needs a strictly higher minXp than the last.
+  var RANKS = [
+    { name: "Новичок", minXp: 0, gradient: ["#6B7280", "#9CA3AF"], icon: "🌱" },
+    { name: "Любитель", minXp: 200, gradient: ["#22C55E", "#4ADE80"], icon: "📖" },
+    { name: "Читатель", minXp: 500, gradient: ["#06B6D4", "#22D3EE"], icon: "📚" },
+    { name: "Знаток", minXp: 1000, gradient: ["#3B82F6", "#6C93FF"], icon: "🔎" },
+    { name: "Ценитель", minXp: 2000, gradient: ["#8B5CF6", "#A78BFA"], icon: "🎭" },
+    { name: "Эксперт", minXp: 3500, gradient: ["#EC4899", "#FF5C77"], icon: "⭐" },
+    { name: "Мастер", minXp: 5500, gradient: ["#FFB238", "#FFD27A"], icon: "🎖️" },
+    { name: "Виртуоз", minXp: 8500, gradient: ["#FF3D9A", "#FFB238"], icon: "💎" },
+    { name: "Легенда", minXp: 13000, gradient: ["#FF3D9A", "#FFB238", "#6C93FF"], icon: "👑" }
+  ];
+
+  function rankIndexForXp(xp) {
+    var idx = 0;
+    for (var i = 0; i < RANKS.length; i++) {
+      if (xp >= RANKS[i].minXp) idx = i; else break;
+    }
+    return idx;
+  }
+
+  // One-time baseline so existing history counts toward XP immediately,
+  // instead of everyone starting at 0 the moment this feature ships.
+  function seedXpFromCurrentState() {
+    var ratedCount = 0;
+    state.manhwas.forEach(function (m) { if (m.rated) ratedCount++; });
+    var awardCount = 0;
+    Object.keys(state.awardWinners).forEach(function (monthKey) {
+      awardCount += Object.keys(state.awardWinners[monthKey]).length;
+    });
+    return state.manhwas.length * XP_VALUES.add + ratedCount * XP_VALUES.rated + awardCount * XP_VALUES.award;
+  }
 
   var STATUSES = [
     { id: "reading", label: "Читаю", color: "#22D3EE" },
@@ -182,6 +222,36 @@
 
   // type: "feature" (новое) | "update" (обновление) | "fix" (исправление)
   var CHANGELOG = [
+    {
+      version: "56",
+      type: "update",
+      title: "Смена статуса — через панель, а не по кругу",
+      items: [
+        "На странице тайтла тап по статусу чтения больше не переключает его по кругу — открывается панель со всеми статусами, выбираешь нужный сразу",
+        "Текущий статус в панели помечен галочкой"
+      ]
+    },
+    {
+      version: "55",
+      type: "feature",
+      title: "Ранги и опыт",
+      items: [
+        "Новая система рангов на вкладке «Профиль»: за оценку тайтла, добавление, смену статуса и победу в премии начисляется опыт (XP) — по-разному за каждое действие",
+        "9 рангов от «Новичка» до «Легенды», у каждого свой цвет, иконка и порог опыта",
+        "Значок текущего ранга — в шапке профиля, подробная карточка с прогресс-баром до следующего ранга — под статистикой",
+        "Опыт не начинается с нуля: при первом запуске после обновления он один раз пересчитывается на основе уже накопленной истории (оценённые тайтлы, добавленные тайтлы, выигранные премии)",
+        "У «Легенды» (максимальный ранг) — особый переливающийся блик на карточке"
+      ]
+    },
+    {
+      version: "54",
+      type: "fix",
+      title: "IndexedDB: один сбой чтения больше не откатывает всё",
+      items: [
+        "Раньше сбой чтения даже одного из шести значений заставлял приложение навсегда откатиться на устаревший снимок в localStorage за всю сессию",
+        "Теперь каждое значение читается независимо — единичный сбой просто получает пустое значение по умолчанию, а не рушит остальные пять"
+      ]
+    },
     {
       version: "53",
       type: "feature",
@@ -713,6 +783,7 @@
     awardCandidates: {},
     awardEditUsed: {},
     activityLog: [],
+    totalXp: 0,
     confirmEditWinnersMonth: null,
     awardsView: "month",
     awardsCategory: null,
@@ -736,6 +807,7 @@
     confirmWinnerPick: null,
     awardsCandidatesConfirmed: false,
     candidatePanelOpen: false,
+    statusPickerOpen: false,
     unlockedIds: {},
     error: null
   };
@@ -1176,6 +1248,12 @@
     } catch (e) {
       target.activityLog = [];
     }
+    try {
+      var rawXp = window.localStorage.getItem(XP_STORAGE_KEY);
+      target.totalXp = rawXp ? JSON.parse(rawXp) : 0;
+    } catch (e) {
+      target.totalXp = 0;
+    }
   }
 
   function applyPostLoadMigrations() {
@@ -1226,6 +1304,15 @@
       });
     });
     if (migrated) save();
+
+    // One-time baseline: XP is monotonic and never existed before this
+    // feature shipped, so a long-time user would otherwise start at 0
+    // despite having a full library already. Runs harmlessly every load
+    // until totalXp becomes non-zero (a fresh install seeds to 0 anyway).
+    if (!state.totalXp) {
+      state.totalXp = seedXpFromCurrentState();
+      if (state.totalXp) saveXp();
+    }
   }
 
   // Loads app state. Prefers IndexedDB (no practical size cap); the very
@@ -1240,9 +1327,14 @@
       })
       .then(function (migrated) {
         if (migrated) {
+          // Guard each read individually: one key failing to read shouldn't
+          // discard the whole IndexedDB dataset and roll back to whatever
+          // stale snapshot localStorage had at migration time.
+          var safe = function (p) { return p.catch(function () { return undefined; }); };
           return Promise.all([
-            idbGet(STORAGE_KEY), idbGet(CHANGELOG_SEEN_KEY), idbGet(AWARDS_STORAGE_KEY),
-            idbGet(AWARD_CANDIDATES_STORAGE_KEY), idbGet(AWARD_EDIT_USED_STORAGE_KEY), idbGet(ACTIVITY_LOG_STORAGE_KEY)
+            safe(idbGet(STORAGE_KEY)), safe(idbGet(CHANGELOG_SEEN_KEY)), safe(idbGet(AWARDS_STORAGE_KEY)),
+            safe(idbGet(AWARD_CANDIDATES_STORAGE_KEY)), safe(idbGet(AWARD_EDIT_USED_STORAGE_KEY)), safe(idbGet(ACTIVITY_LOG_STORAGE_KEY)),
+            safe(idbGet(XP_STORAGE_KEY))
           ]).then(function (r) {
             state.manhwas = r[0] || [];
             state.changelogSeenVersion = r[1] || null;
@@ -1250,6 +1342,7 @@
             state.awardCandidates = r[3] || {};
             state.awardEditUsed = r[4] || {};
             state.activityLog = r[5] || [];
+            state.totalXp = r[6] || 0;
           });
         }
         loadFromLocalStorageInto(state);
@@ -1260,6 +1353,7 @@
           idbSet(AWARD_CANDIDATES_STORAGE_KEY, state.awardCandidates),
           idbSet(AWARD_EDIT_USED_STORAGE_KEY, state.awardEditUsed),
           idbSet(ACTIVITY_LOG_STORAGE_KEY, state.activityLog),
+          idbSet(XP_STORAGE_KEY, state.totalXp),
           idbSet(IDB_MIGRATED_KEY, true)
         ]);
       })
@@ -1292,6 +1386,10 @@
     persistKey(ACTIVITY_LOG_STORAGE_KEY, state.activityLog).catch(function () {});
   }
 
+  function saveXp() {
+    persistKey(XP_STORAGE_KEY, state.totalXp).catch(function () {});
+  }
+
   // Records one diary entry. Only called for meaningful, user-initiated
   // moments (not every slider tick) — see the call sites. Caps the log so a
   // years-old install doesn't grow localStorage without bound.
@@ -1301,6 +1399,11 @@
       state.activityLog.splice(0, state.activityLog.length - ACTIVITY_LOG_MAX);
     }
     saveActivityLog();
+    var xpGain = XP_VALUES[type] || 0;
+    if (xpGain) {
+      state.totalXp += xpGain;
+      saveXp();
+    }
   }
 
   /* ---------- svg pieces ---------- */
@@ -1393,20 +1496,29 @@
     return svg;
   }
 
-  function statusBadgeHtml(statusId, extraAttrs) {
-    var s = statusById(statusId);
-    return (
-      '<button class="mt-status-badge" style="border-color:' + s.color + ";color:" + s.color +
-      ";background:" + s.color + '18;" ' + (extraAttrs || "") + ">" + s.label + "</button>"
-    );
-  }
-
   function statusTagHtml(statusId) {
     var s = statusById(statusId);
     return (
       '<span class="mt-status-badge mt-status-tag" style="border-color:' + s.color + ";color:" + s.color +
       ";background:" + s.color + '18;">' + s.label + "</span>"
     );
+  }
+
+  // Expands under the status badge on the detail page — pick any status
+  // directly instead of cycling through them one tap at a time.
+  function renderStatusPicker(m) {
+    var rows = STATUSES.map(function (s) {
+      var active = s.id === m.status;
+      return (
+        '<div class="mt-status-option' + (active ? " active" : "") + '" data-set-status="' + s.id +
+        '" data-manhwa-id="' + m.id + '">' +
+        '<span class="mt-status-option-dot" style="background:' + s.color + '"></span>' +
+        '<span class="mt-status-option-label">' + escapeHtml(s.label) + "</span>" +
+        (active ? '<span class="mt-status-option-check">✓</span>' : "") +
+        "</div>"
+      );
+    }).join("");
+    return '<div class="mt-paper mt-status-picker">' + rows + "</div>";
   }
 
   function typeBadgeHtml(typeId, extraAttrs) {
@@ -2384,15 +2496,20 @@
     var unlocked = !!state.unlockedIds[m.id];
     var editable = isNew || unlocked;
 
+    var currentStatus = statusById(m.status);
     var html =
       '<div class="mt-detail-head">' +
       '<button class="mt-icon-btn on-dark" id="back-btn" aria-label="Назад">←</button>' +
       '<div class="mt-detail-title">' + escapeHtml(m.title) + "</div>" +
       "</div>" +
       '<div class="mt-detail-status">' +
-      statusBadgeHtml(m.status, 'data-cycle-id="' + m.id + '"') + " " +
+      '<button class="mt-status-badge" id="status-picker-toggle" style="border-color:' + currentStatus.color +
+      ";color:" + currentStatus.color + ";background:" + currentStatus.color + '18;">' +
+      escapeHtml(currentStatus.label) + " " + (state.statusPickerOpen ? "▴" : "▾") +
+      "</button> " +
       typeBadgeHtml(m.type || "manhwa", 'data-cycle-type-id="' + m.id + '"') +
       "</div>" +
+      (state.statusPickerOpen ? renderStatusPicker(m) : "") +
       renderErrorBanner() +
       '<div class="mt-detail-body">';
 
@@ -2635,6 +2752,47 @@
     return '<div class="mt-paper"><div class="mt-panel-title">ДНЕВНИК ТАЙТЛА</div><div class="mt-activity-list">' + rows + "</div></div>";
   }
 
+  function renderRankBadge() {
+    var idx = rankIndexForXp(state.totalXp);
+    var rank = RANKS[idx];
+    return (
+      '<div class="mt-rank-badge" style="background:linear-gradient(135deg,' + rank.gradient.join(",") + ')">' +
+      '<span class="mt-rank-badge-icon">' + rank.icon + "</span>" +
+      '<span class="mt-rank-badge-name">' + escapeHtml(rank.name) + "</span>" +
+      "</div>"
+    );
+  }
+
+  function renderRankPanel() {
+    var idx = rankIndexForXp(state.totalXp);
+    var rank = RANKS[idx];
+    var next = RANKS[idx + 1];
+    var grad = rank.gradient.join(",");
+    var isMax = !next;
+    var progressPct, progressLabel;
+    if (isMax) {
+      progressPct = 100;
+      progressLabel = "Максимальный ранг достигнут";
+    } else {
+      var span = next.minXp - rank.minXp;
+      var into = state.totalXp - rank.minXp;
+      progressPct = Math.max(3, Math.min(100, Math.round((into / span) * 100)));
+      progressLabel = (next.minXp - state.totalXp) + " XP до ранга «" + escapeHtml(next.name) + "»";
+    }
+    return (
+      '<div class="mt-paper mt-rank-panel' + (isMax ? " mt-rank-panel-legendary" : "") + '">' +
+      '<div class="mt-rank-panel-top">' +
+      '<span class="mt-rank-panel-icon" style="background:linear-gradient(135deg,' + grad + ')">' + rank.icon + "</span>" +
+      '<div><div class="mt-rank-panel-name">' + escapeHtml(rank.name) + "</div>" +
+      '<div class="mt-rank-panel-xp">' + state.totalXp + " XP</div></div>" +
+      "</div>" +
+      '<div class="mt-rank-progress-track"><div class="mt-rank-progress-fill" style="width:' + progressPct +
+      "%;background:linear-gradient(90deg," + grad + ')"></div></div>' +
+      '<div class="mt-rank-progress-label">' + escapeHtml(progressLabel) + "</div>" +
+      "</div>"
+    );
+  }
+
   function renderProfile() {
     var rated = state.manhwas.filter(function (m) { return m.criteria.length > 0; });
     var overallAvg = rated.length
@@ -2645,9 +2803,12 @@
       '<div class="mt-profile-head">' +
       '<div class="mt-profile-avatar">' + ICON_USER + "</div>" +
       '<div><div class="mt-profile-title">ПРОФИЛЬ<span style="color:#FF3D9A">.</span></div>' +
-      '<div class="mt-profile-sub">Статистика по всей библиотеке</div></div>' +
+      '<div class="mt-profile-sub">Статистика по всей библиотеке</div>' +
+      renderRankBadge() +
+      "</div>" +
       "</div>" + renderErrorBanner() +
       '<div class="mt-list">' +
+      renderRankPanel() +
       '<div class="mt-chip-row">' +
       '<div class="mt-chip"><div class="mt-chip-value">' + state.manhwas.length + '</div><div class="mt-chip-label">манхв в списке</div></div>' +
       '<div class="mt-chip"><div class="mt-chip-value" style="color:#FFB238">' +
@@ -2935,19 +3096,27 @@
       el.addEventListener("click", function () {
         state.selectedId = el.getAttribute("data-open-id");
         state.candidatePanelOpen = false;
+        state.statusPickerOpen = false;
         render();
       });
     });
 
-    // cycle status
-    app.querySelectorAll("[data-cycle-id]").forEach(function (btn) {
-      btn.addEventListener("click", function (e) {
+    // status picker: tap the badge to open a panel of all statuses, tap one to pick it
+    var statusPickerToggle = document.getElementById("status-picker-toggle");
+    if (statusPickerToggle) statusPickerToggle.addEventListener("click", function (e) {
+      e.stopPropagation();
+      state.statusPickerOpen = !state.statusPickerOpen;
+      render();
+    });
+
+    app.querySelectorAll("[data-set-status]").forEach(function (row) {
+      row.addEventListener("click", function (e) {
         e.stopPropagation();
-        var id = btn.getAttribute("data-cycle-id");
+        var id = row.getAttribute("data-manhwa-id");
+        var newStatus = row.getAttribute("data-set-status");
         var m = findManhwa(id);
-        if (!m) return;
-        var idx = STATUSES.findIndex(function (s) { return s.id === m.status; });
-        var newStatus = STATUSES[(idx + 1) % STATUSES.length].id;
+        state.statusPickerOpen = false;
+        if (!m || m.status === newStatus) { render(); return; }
         m.status = newStatus;
         if (m.status === "done") m.completedAt = Date.now();
         save();
@@ -3119,6 +3288,7 @@
       state.addingCriterion = false;
       state.pendingGenreDraft = "";
       state.candidatePanelOpen = false;
+      state.statusPickerOpen = false;
       render();
     });
 

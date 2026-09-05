@@ -242,6 +242,19 @@ body {
 }
 .mt-status-tag { cursor: default; }
 
+.mt-status-picker {
+  margin: 0 16px 16px; padding: 8px; display: flex; flex-direction: column; gap: 4px;
+}
+.mt-status-option {
+  display: flex; align-items: center; gap: 10px; padding: 10px 10px; border-radius: 10px;
+  cursor: pointer; transition: background .15s ease;
+}
+.mt-status-option:active { background: rgba(255,255,255,0.06); }
+.mt-status-option.active { background: rgba(255,255,255,0.05); }
+.mt-status-option-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.mt-status-option-label { flex: 1; font-size: 13.5px; font-weight: 700; color: var(--text-primary); }
+.mt-status-option-check { color: var(--amber); font-weight: 800; flex-shrink: 0; }
+
 .mt-icon-btn {
   background: transparent; border: none; color: var(--text-faint); font-size: 16px;
   cursor: pointer; padding: 4px; line-height: 1; flex-shrink: 0;
@@ -445,6 +458,35 @@ input[type="range"].mt-slider::-moz-range-thumb {
 .mt-profile-avatar svg { width: 22px; height: 22px; }
 .mt-profile-title { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 26px; color: var(--text-primary); }
 .mt-profile-sub { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
+
+.mt-rank-badge {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 9px;
+  padding: 4px 12px 4px 4px; border-radius: 20px; font-size: 12px; font-weight: 800; color: #14101C;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+}
+.mt-rank-badge-icon {
+  width: 21px; height: 21px; border-radius: 50%; background: rgba(255,255,255,0.4);
+  display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;
+}
+
+.mt-rank-panel { position: relative; overflow: hidden; }
+.mt-rank-panel-top { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.mt-rank-panel-icon {
+  width: 54px; height: 54px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 27px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+}
+.mt-rank-panel-name { font-size: 19px; font-weight: 800; color: var(--text-primary); line-height: 1.3; }
+.mt-rank-panel-xp { font-family: 'Space Mono', monospace; font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
+.mt-rank-progress-track { height: 10px; border-radius: 6px; background: rgba(255,255,255,0.07); overflow: hidden; }
+.mt-rank-progress-fill { height: 100%; border-radius: 6px; transition: width 0.5s cubic-bezier(.34,1.56,.64,1); }
+.mt-rank-progress-label { font-size: 11.5px; color: var(--text-muted); margin-top: 9px; text-align: center; }
+.mt-rank-panel-legendary::after {
+  content: ""; position: absolute; top: 0; left: -65%; width: 45%; height: 100%;
+  background: linear-gradient(115deg, transparent, rgba(255,255,255,0.3), transparent);
+  transform: skewX(-18deg); animation: mt-add-shine 3.4s ease-in-out infinite;
+  pointer-events: none;
+}
 
 .mt-chip-row { display: flex; flex-wrap: wrap; gap: 10px; }
 .mt-chip {
@@ -769,7 +811,7 @@ input[type="range"].mt-slider::-moz-range-thumb {
   .mt-btn, .mt-tab-v2, .mt-tab-icon-wrap, .mt-paper, .mt-grid-card, .mt-mini-row,
   .mt-changelog-entry, .mt-stamp, .mt-cover-score, .mt-icon-round, .mt-primary-btn,
   .mt-filter-chip, .mt-tag-chip, .mt-emotion-star, .mt-anilist-row, .mt-add-btn, .mt-add-btn::after,
-  .mt-cover-trophy, .mt-cover-worst,
+  .mt-cover-trophy, .mt-cover-worst, .mt-rank-panel-legendary::after, .mt-rank-progress-fill,
   .mt-reveal-backdrop, .mt-reveal-card, .mt-reveal-cover, .mt-reveal-title, .mt-reveal-stamp, .mt-reveal-notes {
     animation: none !important; transition: none !important;
   }
